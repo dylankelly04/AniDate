@@ -270,6 +270,14 @@ export default function MatchesPage() {
                             )}
                         </div>
                       </div>
+
+                      {/* Chat Button */}
+                      <Button asChild className="w-full">
+                        <Link href={`/user-chat/${match.id}`}>
+                          <MessageCircle className="w-4 h-4 mr-2" />
+                          Start Chat
+                        </Link>
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>

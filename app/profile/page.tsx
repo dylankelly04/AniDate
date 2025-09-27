@@ -1252,8 +1252,7 @@ export default function ProfilePage() {
                             key={interest}
                             className="flex items-center space-x-2"
                           >
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               id={`pref-${interest}`}
                               checked={preferences.interestedIn.includes(
                                 interest

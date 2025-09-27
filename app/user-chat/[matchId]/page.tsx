@@ -9,11 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Heart, Send, ArrowLeft, MessageCircle, User } from "lucide-react";
+import { Heart, Send, ArrowLeft, MessageCircle, User, X, Eye, EyeOff } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { HorizontalSuggestions } from "@/components/ui/horizontal-suggestions";
 import { generateRealPersonSuggestions } from "@/lib/ai-assistant-service";
+import { ConversationPointsDisplay } from "@/components/ui/conversation-points-display";
+import { conversationPointsService } from "@/lib/conversation-points-service";
+import { ProfileModal } from "@/components/ui/profile-modal";
 
 interface Message {
   id: string;
@@ -36,6 +40,8 @@ interface Match {
     id: string;
     full_name: string;
     avatar_url: string | null;
+    original_avatar_url?: string | null;
+    anime_avatar_url?: string | null;
   };
 }
 
@@ -50,8 +56,14 @@ export default function UserChatPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [conversationPoints, setConversationPoints] = useState(0);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showFullSizeImage, setShowFullSizeImage] = useState(false);
+  const [showOriginalImage, setShowOriginalImage] = useState(false);
+  const [showNewMessageIndicator, setShowNewMessageIndicator] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
   const [previousMessageCount, setPreviousMessageCount] = useState(0);
 
@@ -64,17 +76,67 @@ export default function UserChatPage() {
         checkForNewMessages();
       }, 2000);
 
-      return () => clearInterval(interval);
+      return () => {
+        clearInterval(interval);
+      };
     }
   }, [user, matchId]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    // Only auto-scroll if user is near the bottom of the chat or if it's a new message from them
+    const chatContainer = messagesEndRef.current?.parentElement;
+    if (chatContainer) {
+      const isNearBottom = chatContainer.scrollTop + chatContainer.clientHeight >= chatContainer.scrollHeight - 100;
+      const isNewMessage = messages.length > previousMessageCount;
+      const lastMessage = messages[messages.length - 1];
+      const isOwnMessage = lastMessage?.sender_id === user?.id;
+      
+      // Auto-scroll if: user is near bottom, or they just sent a message, or it's the initial load
+      if (isNearBottom || (isNewMessage && isOwnMessage) || messages.length <= 1) {
+        setTimeout(() => {
+          scrollToBottom();
+        }, 100);
+        setShowNewMessageIndicator(false);
+      } else if (isNewMessage && !isOwnMessage) {
+        // Show indicator if there's a new message from other user and user is scrolled up
+        setShowNewMessageIndicator(true);
+      }
+    }
+    
+    // Update previous message count for next comparison
+    setPreviousMessageCount(messages.length);
+  }, [messages, user?.id]);
+
+  // Refresh points whenever messages change
+  useEffect(() => {
+    console.log(`Messages array changed. Length: ${messages.length}`);
+    if (messages.length > 0 && user && matchId) {
+      // Calculate points based on current message count
+      const currentPoints = messages.length * 5;
+      console.log(`Updating points: ${messages.length} messages × 5 = ${currentPoints} points`);
+      setConversationPoints(currentPoints);
+    } else if (messages.length === 0) {
+      setConversationPoints(0);
+    }
+  }, [messages, user, matchId]); // Changed from messages.length to messages to catch all changes
+
+  // Debug: Track when conversationPoints state changes
+  useEffect(() => {
+    console.log(`conversationPoints state changed to: ${conversationPoints}`);
+  }, [conversationPoints]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+
+  // Initial scroll to bottom when messages first load
+  useEffect(() => {
+    if (messages.length > 0 && !loading) {
+      setTimeout(() => {
+        scrollToBottom();
+      }, 200);
+    }
+  }, [loading]);
 
   const checkForNewMessages = async () => {
     if (!user || !matchId) return;
@@ -112,8 +174,28 @@ export default function UserChatPage() {
 
       setMessages(messagesData);
       setPreviousMessageCount(currentCount);
+      
+      // Update points immediately when new messages are received
+      if (messagesData && messagesData.length > 0) {
+        const newPoints = messagesData.length * 5;
+        console.log(`Updating points after receiving messages: ${messagesData.length} × 5 = ${newPoints}`);
+        setConversationPoints(newPoints);
+      }
     } catch (err) {
       console.error("Error checking for new messages:", err);
+    }
+  };
+
+  const fetchConversationPoints = async () => {
+    if (!user || !matchId) return;
+    
+    try {
+      console.log(`Fetching conversation points for match ${matchId}...`);
+      const points = await conversationPointsService.getConversationPoints(matchId, user.id);
+      console.log(`Fetched ${points} conversation points`);
+      setConversationPoints(points);
+    } catch (err) {
+      console.error("Error fetching conversation points:", err);
     }
   };
 
@@ -125,16 +207,23 @@ export default function UserChatPage() {
       // First, get the match details
       const { data: matchData, error: matchError } = await supabase
         .from("matches")
-        .select(
+          .select(
+            `
+            *,
+            matched_user:profiles!matches_user2_id_fkey(
+              id,
+              full_name,
+              avatar_url,
+              original_avatar_url,
+              anime_avatar_url,
+              age,
+              bio,
+              location,
+              interests,
+              college
+            )
           `
-          *,
-          matched_user:profiles!matches_user2_id_fkey(
-            id,
-            full_name,
-            avatar_url
           )
-        `
-        )
         .eq("id", matchId)
         .eq("status", "accepted")
         .single();
@@ -149,7 +238,7 @@ export default function UserChatPage() {
       if (matchData.user2_id === user?.id) {
         const { data: user1Profile, error: profileError } = await supabase
           .from("profiles")
-          .select("id, full_name, avatar_url")
+          .select("id, full_name, avatar_url, original_avatar_url, anime_avatar_url, age, bio, location, interests, college")
           .eq("id", matchData.user1_id)
           .single();
 
@@ -194,6 +283,9 @@ export default function UserChatPage() {
             .in("id", messageIds);
         }
       }
+      
+      // Fetch conversation points
+      await fetchConversationPoints();
     } catch (err) {
       console.error("Exception in fetchMatchAndMessages:", err);
       setError("Failed to load chat");
@@ -230,8 +322,28 @@ export default function UserChatPage() {
         return;
       }
 
-      setMessages((prev) => [...prev, data]);
+      console.log(`Before adding message: ${messages.length} messages`);
+      setMessages((prev) => {
+        const newMessages = [...prev, data];
+        console.log(`After adding message: ${newMessages.length} messages`);
+        
+        // Update points immediately
+        const newPoints = newMessages.length * 5;
+        console.log(`Updating points immediately: ${newMessages.length} × 5 = ${newPoints}`);
+        console.log(`Current conversationPoints state before update: ${conversationPoints}`);
+        setConversationPoints(newPoints);
+        console.log(`setConversationPoints called with: ${newPoints}`);
+        
+        return newMessages;
+      });
       setNewMessage("");
+      
+      // Refocus the input and scroll to bottom after sending message
+      setTimeout(() => {
+        messageInputRef.current?.focus();
+        scrollToBottom();
+      }, 100);
+      
       console.log("Playing message sent sound...");
       soundManager.playMessageSent();
 
@@ -371,9 +483,16 @@ export default function UserChatPage() {
               </Link>
             </Button>
             <div className="flex items-center gap-3">
-              <Avatar className="w-8 h-8">
+              <Avatar 
+                className="w-8 h-8 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                onClick={() => setShowFullSizeImage(true)}
+              >
                 <AvatarImage
-                  src={match.matched_user?.avatar_url || ""}
+                  src={
+                    showOriginalImage && match.matched_user?.original_avatar_url
+                      ? match.matched_user.original_avatar_url
+                      : match.matched_user?.anime_avatar_url || match.matched_user?.avatar_url || ""
+                  }
                   alt={match.matched_user?.full_name}
                 />
                 <AvatarFallback>
@@ -381,9 +500,12 @@ export default function UserChatPage() {
                 </AvatarFallback>
               </Avatar>
               <div>
-                <h1 className="font-semibold">
+                <button 
+                  onClick={() => setShowProfileModal(true)}
+                  className="font-semibold hover:text-primary transition-colors cursor-pointer"
+                >
                   {match.matched_user?.full_name}
-                </h1>
+                </button>
                 <p className="text-sm text-muted-foreground">Online</p>
               </div>
             </div>
@@ -446,6 +568,25 @@ export default function UserChatPage() {
                       </div>
                     ))
                   )}
+                  
+                  {/* New Message Indicator */}
+                  {showNewMessageIndicator && (
+                    <div className="sticky bottom-0 flex justify-center py-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="bg-background/80 backdrop-blur-sm border-primary/20 hover:bg-primary/10"
+                        onClick={() => {
+                          scrollToBottom();
+                          setShowNewMessageIndicator(false);
+                        }}
+                      >
+                        <MessageCircle className="w-3 h-3 mr-1" />
+                        New message
+                      </Button>
+                    </div>
+                  )}
+                  
                   <div ref={messagesEndRef} />
                 </CardContent>
 
@@ -453,11 +594,13 @@ export default function UserChatPage() {
                 <CardHeader className="border-t">
                   <form onSubmit={sendMessage} className="flex gap-2">
                     <Input
+                      ref={messageInputRef}
                       value={newMessage}
                       onChange={(e) => setNewMessage(e.target.value)}
                       placeholder="Type a message..."
                       className="flex-1"
                       disabled={sending}
+                      autoFocus
                     />
                     <Button
                       type="submit"
@@ -470,8 +613,19 @@ export default function UserChatPage() {
               </Card>
             </div>
 
-            {/* AI Suggestions Panel */}
+            {/* Right Panel */}
             <div className="w-full lg:w-96 flex flex-col space-y-4">
+              {/* Conversation Points - Now at the top */}
+              {user && (
+                <ConversationPointsDisplay
+                  matchId={matchId}
+                  userId={user.id}
+                  points={conversationPoints}
+                  onPointsUpdate={setConversationPoints}
+                />
+              )}
+
+              {/* AI Suggestions Panel */}
               <Card className="bg-background/80 backdrop-blur-sm border-border/50 flex flex-col relative min-h-[240px]">
                 <CardContent className="p-6 flex-1 flex flex-col">
                   <div className="space-y-4 flex-1 flex flex-col">
@@ -511,6 +665,87 @@ export default function UserChatPage() {
           </div>
         </div>
       </main>
+
+      {/* Profile Modal */}
+      {match?.matched_user && (
+        <ProfileModal
+          isOpen={showProfileModal}
+          onClose={() => setShowProfileModal(false)}
+          user={match.matched_user}
+          conversationPoints={conversationPoints}
+        />
+      )}
+
+      {/* Full Size Image Modal */}
+      {match?.matched_user && (
+        <Dialog open={showFullSizeImage} onOpenChange={setShowFullSizeImage}>
+          <DialogContent className="max-w-4xl w-full p-0 overflow-hidden">
+            <div className="relative">
+              {/* Close Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute top-4 right-4 z-10 bg-black/50 hover:bg-black/70 text-white"
+                onClick={() => setShowFullSizeImage(false)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+
+              {/* Photo Toggle Button for Full Size */}
+              {conversationPointsService.isFieldUnlocked(conversationPoints, 'real_photo') && 
+               match.matched_user.original_avatar_url && 
+               match.matched_user.anime_avatar_url && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="absolute top-4 left-4 z-10 bg-black/50 hover:bg-black/70 text-white border-white/20"
+                  onClick={() => setShowOriginalImage(!showOriginalImage)}
+                >
+                  {showOriginalImage ? (
+                    <>
+                      <EyeOff className="w-3 h-3 mr-1" />
+                      Anime
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="w-3 h-3 mr-1" />
+                      Real
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {/* Full Size Image */}
+              <div className="flex items-center justify-center bg-black min-h-[60vh] max-h-[80vh]">
+                <img
+                  src={
+                    showOriginalImage && match.matched_user.original_avatar_url
+                      ? match.matched_user.original_avatar_url
+                      : match.matched_user.anime_avatar_url || match.matched_user.avatar_url || ""
+                  }
+                  alt={match.matched_user.full_name}
+                  className="max-w-full max-h-full object-contain"
+                  style={{ maxHeight: '80vh' }}
+                />
+              </div>
+
+              {/* Image Info */}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+                <div className="text-white text-center">
+                  <h3 className="text-lg font-semibold">{match.matched_user.full_name}</h3>
+                  {conversationPointsService.isFieldUnlocked(conversationPoints, 'real_photo') && 
+                   match.matched_user.original_avatar_url && 
+                   match.matched_user.anime_avatar_url && (
+                    <p className="text-sm text-white/80 mt-1">
+                      {showOriginalImage ? 'Real Photo' : 'Anime Version'}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
