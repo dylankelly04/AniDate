@@ -10,7 +10,13 @@ import { Heart, ArrowLeft, Send, User, Bot, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useClientOnly } from "@/hooks/use-client-only";
 import { useAuth } from "@/lib/auth-context";
-import { processChatSession, addAuraPoints } from "@/lib/aura-service";
+import { addAuraPoints } from "@/lib/aura-service";
+import {
+  getOrCreateConversation,
+  addMessage,
+  getConversationForCharacter,
+  type AIMessage,
+} from "@/lib/ai-conversation-service-v2";
 
 interface AnimeCharacter {
   id: string;
@@ -45,7 +51,7 @@ export default function ChatPage() {
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [sessionCompleted, setSessionCompleted] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
   const characterId = params.characterId as string;
 
@@ -75,21 +81,113 @@ export default function ChatPage() {
       if (error) throw error;
       setCharacter(data);
 
-      // Add welcome message
-      setMessages([
-        {
-          id: "welcome",
-          role: "assistant",
-          content: `Hello! I'm ${data.name} from ${data.series}. ${data.personality} How can I help you today?`,
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      // Load existing conversation if user is logged in
+      if (user) {
+        await loadConversation(data);
+      } else {
+        // Add welcome message for non-logged in users
+        setMessages([
+          {
+            id: "welcome",
+            role: "assistant",
+            content: `Hello! I'm ${data.name} from ${data.series}. ${data.personality} How can I help you today?`,
+            created_at: new Date().toISOString(),
+          },
+        ]);
+      }
     } catch (error) {
       console.error("Error fetching character:", error);
       toast.error("Character not found");
       router.push("/characters");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadConversation = async (characterData: AnimeCharacter) => {
+    if (!user) {
+      console.log("No user found, skipping conversation load");
+      return;
+    }
+
+    console.log(
+      "Loading conversation for user:",
+      user.id,
+      "character:",
+      characterId
+    );
+
+    try {
+      const result = await getConversationForCharacter(user.id, characterId);
+      console.log("Conversation result:", result);
+
+      if (result.success && result.conversation) {
+        console.log(
+          "Loading existing conversation with",
+          result.conversation.messages.length,
+          "messages"
+        );
+        // Load existing conversation
+        setConversationId(result.conversation.id);
+        setMessages(
+          result.conversation.messages.map((msg, index) => ({
+            id: `${result.conversation.id}-${index}`,
+            role: msg.role,
+            content: msg.content,
+            created_at: msg.timestamp,
+          }))
+        );
+      } else {
+        console.log("No existing conversation found, creating new one");
+        // Create new conversation and add welcome message
+        const convResult = await getOrCreateConversation(
+          user.id,
+          characterId,
+          characterData.name,
+          characterData.series
+        );
+        console.log("Create conversation result:", convResult);
+
+        if (convResult.success && convResult.conversationId) {
+          setConversationId(convResult.conversationId);
+          console.log(
+            "Created conversation with ID:",
+            convResult.conversationId
+          );
+
+          // Add welcome message to database
+          const welcomeMessage = `Hello! I'm ${characterData.name} from ${characterData.series}. ${characterData.personality} How can I help you today?`;
+          const messageResult = await addMessage(
+            convResult.conversationId,
+            "assistant",
+            welcomeMessage
+          );
+          console.log("Welcome message result:", messageResult);
+
+          // Set welcome message in UI
+          setMessages([
+            {
+              id: `${convResult.conversationId}-0`,
+              role: "assistant",
+              content: welcomeMessage,
+              created_at: new Date().toISOString(),
+            },
+          ]);
+        } else {
+          console.error("Failed to create conversation:", convResult.error);
+        }
+      }
+    } catch (error) {
+      console.error("Error loading conversation:", error);
+      // Fallback to welcome message
+      setMessages([
+        {
+          id: "fallback-welcome",
+          role: "assistant",
+          content: `Hello! I'm ${characterData.name} from ${characterData.series}. ${characterData.personality} How can I help you today?`,
+          created_at: new Date().toISOString(),
+        },
+      ]);
     }
   };
 
@@ -108,6 +206,19 @@ export default function ChatPage() {
     setSending(true);
 
     try {
+      // Save user message to database if conversation exists
+      if (conversationId) {
+        console.log("Saving user message to conversation:", conversationId);
+        const userMsgResult = await addMessage(
+          conversationId,
+          "user",
+          newMessage
+        );
+        console.log("User message save result:", userMsgResult);
+      } else {
+        console.log("No conversation ID, skipping user message save");
+      }
+
       // Award 1 aura point for sending a message
       if (user) {
         try {
@@ -139,6 +250,22 @@ export default function ChatPage() {
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Save assistant message to database if conversation exists
+      if (conversationId) {
+        console.log(
+          "Saving assistant message to conversation:",
+          conversationId
+        );
+        const assistantMsgResult = await addMessage(
+          conversationId,
+          "assistant",
+          response
+        );
+        console.log("Assistant message save result:", assistantMsgResult);
+      } else {
+        console.log("No conversation ID, skipping assistant message save");
+      }
     } catch (error) {
       console.error("Error sending message:", error);
       toast.error("Failed to send message");
@@ -166,39 +293,6 @@ export default function ChatPage() {
     ];
 
     return responses[Math.floor(Math.random() * responses.length)];
-  };
-
-  const completeChatSession = async () => {
-    if (!user || !character || messages.length < 2 || sessionCompleted) return;
-
-    try {
-      const result = await processChatSession(
-        user.id,
-        character.id,
-        character.name,
-        messages.map((msg) => ({ role: msg.role, content: msg.content }))
-      );
-
-      if (result.success) {
-        setSessionCompleted(true);
-
-        if (result.levelUp) {
-          toast.success(
-            `🎉 Level Up! You're now level ${result.newLevel}! +${result.pointsAdded} aura points`,
-            { duration: 5000 }
-          );
-        } else {
-          toast.success(
-            `✨ Great conversation! +${result.pointsAdded} aura points earned`,
-            { duration: 3000 }
-          );
-        }
-      } else {
-        console.error("Failed to process chat session:", result.error);
-      }
-    } catch (error) {
-      console.error("Error completing chat session:", error);
-    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -251,10 +345,10 @@ export default function ChatPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => router.push("/characters")}
+              onClick={() => router.push("/characters?tab=discover")}
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Characters
+              Back to Discover
             </Button>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center overflow-hidden">
@@ -383,48 +477,6 @@ export default function ChatPage() {
                     <Send className="w-4 h-4" />
                   </Button>
                 </div>
-
-                {/* Complete Session Button */}
-                {messages.length >= 4 && !sessionCompleted && (
-                  <div className="mt-4 p-4 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg border border-primary/20">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-primary" />
-                        <span className="text-sm font-medium">
-                          Ready to earn aura points?
-                        </span>
-                      </div>
-                      <Button
-                        onClick={completeChatSession}
-                        size="sm"
-                        className="bg-primary hover:bg-primary/90"
-                      >
-                        Complete Session
-                        <Sparkles className="w-3 h-3 ml-1" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Complete this conversation to earn aura points and level
-                      up!
-                    </p>
-                  </div>
-                )}
-
-                {/* Session Completed */}
-                {sessionCompleted && (
-                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <div className="flex items-center gap-2 text-green-700">
-                      <Sparkles className="w-4 h-4" />
-                      <span className="text-sm font-medium">
-                        Session Completed!
-                      </span>
-                    </div>
-                    <p className="text-xs text-green-600 mt-1">
-                      You've earned aura points for this conversation. Keep
-                      chatting to earn more!
-                    </p>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>

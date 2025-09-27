@@ -24,8 +24,10 @@ import {
   Star,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useClientOnly } from "@/hooks/use-client-only";
+import { useAuth } from "@/lib/auth-context";
+import { getUserConversations } from "@/lib/ai-conversation-service-v2";
 
 interface AnimeCharacter {
   id: string;
@@ -45,13 +47,48 @@ export default function CharactersPage() {
   const [selectedSeries, setSelectedSeries] = useState<string>("all");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [likedCharacters, setLikedCharacters] = useState<AnimeCharacter[]>([]);
+  const [activeTab, setActiveTab] = useState<string>("discover");
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [conversationsLoading, setConversationsLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const mounted = useClientOnly();
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchCharacters();
   }, []);
+
+  useEffect(() => {
+    if (user && activeTab === "discover") {
+      loadConversations();
+    }
+  }, [user, activeTab]);
+
+  // Reload conversations when the page becomes visible (user comes back from chat)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && user && activeTab === "discover") {
+        loadConversations();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [user, activeTab]);
+
+  useEffect(() => {
+    // Check for tab parameter in URL
+    const tab = searchParams.get("tab");
+    if (tab === "browse") {
+      setActiveTab("browse");
+    } else if (tab === "discover") {
+      setActiveTab("discover");
+    }
+    // If no tab parameter, it will use the default "discover" state
+  }, [searchParams]);
 
   const fetchCharacters = async () => {
     try {
@@ -70,6 +107,33 @@ export default function CharactersPage() {
     }
   };
 
+  const loadConversations = async () => {
+    if (!user) return;
+
+    setConversationsLoading(true);
+    try {
+      const result = await getUserConversations(user.id);
+      console.log("Conversations loaded:", result);
+      if (result.success && result.conversations) {
+        // Sort conversations by most recent first
+        const sortedConversations = result.conversations.sort(
+          (a, b) =>
+            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        );
+        setConversations(sortedConversations);
+        console.log("Set conversations:", sortedConversations.length);
+      } else {
+        console.log("No conversations found or error:", result.error);
+        setConversations([]);
+      }
+    } catch (error) {
+      console.error("Error loading conversations:", error);
+      setConversations([]);
+    } finally {
+      setConversationsLoading(false);
+    }
+  };
+
   const getUniqueSeries = () => {
     const series = characters.map((char) => char.series);
     return Array.from(new Set(series));
@@ -80,11 +144,16 @@ export default function CharactersPage() {
       ? characters
       : characters.filter((char) => char.series === selectedSeries);
 
-  const currentCharacter = filteredCharacters[currentIndex];
+  // Filter out characters that already have conversations
+  const availableCharacters = filteredCharacters.filter((character) => {
+    return !conversations.some((conv) => conv.character_id === character.id);
+  });
+
+  const currentCharacter = availableCharacters[currentIndex];
 
   const handlePass = (characterId: string) => {
     // Move to next character
-    if (currentIndex < filteredCharacters.length - 1) {
+    if (currentIndex < availableCharacters.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
       // Reset to beginning if at end
@@ -94,13 +163,16 @@ export default function CharactersPage() {
 
   const handleLike = (characterId: string) => {
     // Add character to liked list and move to next
-    const character = filteredCharacters.find(
+    const character = availableCharacters.find(
       (char) => char.id === characterId
     );
     if (character && !likedCharacters.find((char) => char.id === characterId)) {
       setLikedCharacters((prev) => [...prev, character]);
     }
     handlePass(characterId);
+
+    // Automatically open the chat for the liked character
+    router.push(`/chat/${characterId}`);
   };
 
   const handleSuperLike = (characterId: string) => {
@@ -180,15 +252,19 @@ export default function CharactersPage() {
           </div>
 
           {/* Tabs for different viewing modes */}
-          <Tabs defaultValue="browse" className="w-full">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="w-full"
+          >
             <TabsList className="grid w-full grid-cols-2 mb-8">
-              <TabsTrigger value="browse" className="flex items-center gap-2">
-                <Grid3X3 className="w-4 h-4" />
-                Browse Characters
-              </TabsTrigger>
               <TabsTrigger value="discover" className="flex items-center gap-2">
                 <Heart className="w-4 h-4" />
                 Discover Mode
+              </TabsTrigger>
+              <TabsTrigger value="browse" className="flex items-center gap-2">
+                <Grid3X3 className="w-4 h-4" />
+                Browse Characters
               </TabsTrigger>
             </TabsList>
 
@@ -331,43 +407,110 @@ export default function CharactersPage() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[600px]">
                 {/* Left Side - Chat Log */}
                 <div className="space-y-4">
-                  {likedCharacters.length > 0 ? (
-                    <div className="space-y-3">
-                      {likedCharacters.map((character) => (
-                        <Card
-                          key={character.id}
-                          className="cursor-pointer hover:shadow-md transition-shadow"
-                          onClick={() => handleStartChat(character.id)}
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                                {character.avatar_url ? (
-                                  <img
-                                    src={character.avatar_url}
-                                    alt={character.name}
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  <User className="w-6 h-6 text-muted-foreground" />
-                                )}
+                  {/* Conversations Header */}
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">
+                      Your Conversations
+                    </h3>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={loadConversations}
+                      disabled={conversationsLoading}
+                    >
+                      {conversationsLoading ? (
+                        <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        "Refresh"
+                      )}
+                    </Button>
+                  </div>
+                  {conversationsLoading ? (
+                    <Card>
+                      <CardContent className="p-6 text-center">
+                        <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-3"></div>
+                        <p className="text-sm text-muted-foreground">
+                          Loading conversations...
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ) : conversations.length > 0 ? (
+                    <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                      {conversations.map((conversation) => {
+                        const character = characters.find(
+                          (char) => char.id === conversation.character_id
+                        );
+                        if (!character) return null;
+
+                        const lastMessage =
+                          conversation.messages &&
+                          conversation.messages.length > 0
+                            ? conversation.messages[
+                                conversation.messages.length - 1
+                              ]
+                            : null;
+
+                        return (
+                          <Card
+                            key={conversation.id}
+                            className="cursor-pointer hover:shadow-md transition-shadow"
+                            onClick={() =>
+                              handleStartChat(conversation.character_id)
+                            }
+                          >
+                            <CardContent>
+                              <div className="flex items-center gap-2">
+                                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                                  {character.avatar_url ? (
+                                    <img
+                                      src={character.avatar_url}
+                                      alt={character.name}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <User className="w-5 h-5 text-muted-foreground" />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between">
+                                    <h4 className="font-medium truncate text-sm">
+                                      {character.name}
+                                    </h4>
+                                    <MessageCircle className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                  </div>
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {character.series}
+                                  </p>
+                                  {lastMessage && (
+                                    <div className="mt-0.5">
+                                      <p className="text-xs text-muted-foreground line-clamp-1">
+                                        <span className="font-medium">
+                                          {lastMessage.role === "user"
+                                            ? "You: "
+                                            : `${character.name}: `}
+                                        </span>
+                                        {lastMessage.content}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground mt-0.5">
+                                        {new Date(
+                                          lastMessage.timestamp
+                                        ).toLocaleDateString()}{" "}
+                                        at{" "}
+                                        {new Date(
+                                          lastMessage.timestamp
+                                        ).toLocaleTimeString([], {
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        })}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <div className="flex-1">
-                                <h4 className="font-medium">
-                                  {character.name}
-                                </h4>
-                                <p className="text-sm text-muted-foreground">
-                                  {character.series}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Click to start chatting
-                                </p>
-                              </div>
-                              <MessageCircle className="w-5 h-5 text-muted-foreground" />
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
                     </div>
                   ) : (
                     <Card>
@@ -376,8 +519,13 @@ export default function CharactersPage() {
                         <h4 className="font-medium mb-2">
                           No conversations yet
                         </h4>
-                        <p className="text-sm text-muted-foreground">
-                          Like characters to start conversations with them
+                        <p className="text-sm text-muted-foreground mb-3">
+                          Like characters on the right to start conversations
+                          with them
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Your conversations will appear here once you start
+                          chatting
                         </p>
                       </CardContent>
                     </Card>
@@ -475,7 +623,7 @@ export default function CharactersPage() {
 
                       {/* Progress */}
                       <div className="mt-4 text-center text-sm text-muted-foreground">
-                        {currentIndex + 1} of {filteredCharacters.length}{" "}
+                        {currentIndex + 1} of {availableCharacters.length}{" "}
                         characters
                       </div>
                     </>
