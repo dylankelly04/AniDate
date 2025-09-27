@@ -203,6 +203,43 @@ export default function HomescreenPage() {
             </div>
           </div>
 
+          {/* Action Buttons */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <Button
+              variant="outline"
+              size="lg"
+              className="h-16 text-base"
+              asChild
+            >
+              <Link href="/matches">
+                <Users className="w-5 h-5 mr-2" />
+                View Matches
+              </Link>
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              className="h-16 text-base"
+              asChild
+            >
+              <Link href="/mystery">
+                <Sparkles className="w-5 h-5 mr-2" />
+                Mystery Mode
+              </Link>
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              className="h-16 text-base"
+              asChild
+            >
+              <Link href="/speeddate">
+                <Heart className="w-5 h-5 mr-2" />
+                Speeddate Mode
+              </Link>
+            </Button>
+          </div>
+
           {/* Aura Points Section */}
           {profile && (
             <div className="bg-background/80 backdrop-blur-sm border border-border/50 rounded-xl p-6 mb-8">
@@ -241,41 +278,6 @@ export default function HomescreenPage() {
               </div>
             </div>
           )}
-
-          {/* Quick Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-            <div className="bg-background/60 backdrop-blur-sm border border-border/30 rounded-lg p-6 text-center">
-              <div className="text-2xl font-bold text-primary mb-2">0</div>
-              <div className="text-sm text-muted-foreground">
-                AI Conversations
-              </div>
-            </div>
-            <div className="bg-background/60 backdrop-blur-sm border border-border/30 rounded-lg p-6 text-center">
-              <div className="text-2xl font-bold text-secondary mb-2">0</div>
-              <div className="text-sm text-muted-foreground">Matches</div>
-            </div>
-            <div className="bg-background/60 backdrop-blur-sm border border-border/30 rounded-lg p-6 text-center">
-              <div className="text-2xl font-bold text-accent mb-2">0</div>
-              <div className="text-sm text-muted-foreground">Messages</div>
-            </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div className="bg-background/80 backdrop-blur-sm border border-border/50 rounded-xl p-8">
-            <h3 className="text-xl font-semibold text-foreground mb-6">
-              Recent Activity
-            </h3>
-            <div className="text-center py-12">
-              <MessageCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground mb-4">
-                No recent activity yet
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Start practicing with AI characters or connect with real people
-                to see your activity here.
-              </p>
-            </div>
-          </div>
         </div>
       </main>
 
