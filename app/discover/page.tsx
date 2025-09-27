@@ -149,17 +149,19 @@ export default function DiscoverPage() {
 
       if (!mutualError && mutualMatch) {
         console.log('🎉 Mutual match found!');
-        // It's a match! Update both records to 'accepted'
+        // It's a match! Update the existing mutual match to 'accepted'
         await supabase
           .from('matches')
           .update({ status: 'accepted' })
           .eq('id', mutualMatch.id);
 
+        // Delete the duplicate match record we just created
         await supabase
           .from('matches')
-          .update({ status: 'accepted' })
+          .delete()
           .eq('user1_id', user.id)
-          .eq('user2_id', profileId);
+          .eq('user2_id', profileId)
+          .eq('status', 'pending');
 
         console.log('🎉 It\'s a match!');
         soundManager.playMatch();
