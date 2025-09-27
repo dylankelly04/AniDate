@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useClientOnly } from "@/hooks/use-client-only";
 
 interface AnimeCharacter {
   id: string;
@@ -40,6 +41,7 @@ export default function CharactersPage() {
   const [selectedSeries, setSelectedSeries] = useState<string>("all");
   const router = useRouter();
   const supabase = createClient();
+  const mounted = useClientOnly();
 
   useEffect(() => {
     fetchCharacters();
@@ -72,7 +74,7 @@ export default function CharactersPage() {
       ? characters
       : characters.filter((char) => char.series === selectedSeries);
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">

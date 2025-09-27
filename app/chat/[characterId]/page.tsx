@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Heart, ArrowLeft, Send, User, Bot } from "lucide-react";
 import { toast } from "sonner";
+import { useClientOnly } from "@/hooks/use-client-only";
 
 interface AnimeCharacter {
   id: string;
@@ -34,6 +35,7 @@ export default function ChatPage() {
   const router = useRouter();
   const supabase = createClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const mounted = useClientOnly();
 
   const [character, setCharacter] = useState<AnimeCharacter | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -150,7 +152,7 @@ export default function ChatPage() {
     }
   };
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">

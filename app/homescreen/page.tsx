@@ -12,15 +12,31 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useClientOnly } from "@/hooks/use-client-only";
 
 export default function HomescreenPage() {
   const { user, signOut } = useAuth();
   const router = useRouter();
+  const mounted = useClientOnly();
 
   const handleSignOut = async () => {
     await signOut();
     router.push("/");
   };
+
+  // Show loading state until component is mounted
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center mx-auto mb-4">
+            <Heart className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
