@@ -114,7 +114,7 @@ interface ProfileData {
 
 export default function ProfilePage() {
   const { user } = useAuth();
-  const { setTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -325,6 +325,13 @@ export default function ProfilePage() {
       return () => clearTimeout(timeoutId);
     }
   }, [preferences, user]);
+
+  // Save theme to preferences when it changes
+  useEffect(() => {
+    if (theme && user) {
+      setPreferences((prev) => ({ ...prev, theme }));
+    }
+  }, [theme, user]);
 
   const handleSave = async () => {
     if (!user || !profile) return;
@@ -1615,32 +1622,6 @@ export default function ProfilePage() {
                       </Button>
                     </div>
 
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-base">
-                          AI Practice Reminders
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
-                          Reminders to practice with AI characters
-                        </p>
-                      </div>
-                      <Button
-                        variant={
-                          preferences.aiPracticeReminders
-                            ? "default"
-                            : "outline"
-                        }
-                        size="sm"
-                        onClick={() =>
-                          setPreferences((prev) => ({
-                            ...prev,
-                            aiPracticeReminders: !prev.aiPracticeReminders,
-                          }))
-                        }
-                      >
-                        {preferences.aiPracticeReminders ? "On" : "Off"}
-                      </Button>
-                    </div>
 
                     <div className="flex items-center justify-between">
                       <div>
@@ -1768,17 +1749,6 @@ export default function ProfilePage() {
                       </Select>
                     </div>
 
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-base">Practice Mode</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Enable practice mode for learning
-                        </p>
-                      </div>
-                      <Button variant="default" size="sm">
-                        On
-                      </Button>
-                    </div>
                   </CardContent>
                 </Card>
 
@@ -1796,7 +1766,7 @@ export default function ProfilePage() {
                       <p className="text-sm text-muted-foreground mb-3">
                         Choose your preferred theme
                       </p>
-                      <Select>
+                      <Select value={theme} onValueChange={setTheme}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select theme" />
                         </SelectTrigger>
@@ -1806,18 +1776,6 @@ export default function ProfilePage() {
                           <SelectItem value="system">Auto (System)</SelectItem>
                         </SelectContent>
                       </Select>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-base">Anime Filters</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Enable anime-style profile filters
-                        </p>
-                      </div>
-                      <Button variant="default" size="sm">
-                        On
-                      </Button>
                     </div>
 
                     <div className="flex items-center justify-between">
@@ -1842,30 +1800,6 @@ export default function ProfilePage() {
                         }}
                       >
                         {preferences.soundEffects ? "On" : "Off"}
-                      </Button>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-base">Vibration</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Vibrate for notifications
-                        </p>
-                      </div>
-                      <Button variant="outline" size="sm">
-                        Off
-                      </Button>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-base">Location Services</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Use location for nearby matches
-                        </p>
-                      </div>
-                      <Button variant="default" size="sm">
-                        On
                       </Button>
                     </div>
                   </CardContent>
