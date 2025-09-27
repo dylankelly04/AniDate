@@ -23,6 +23,18 @@ interface ProfileModalProps {
     avatar_url?: string | null;
     original_avatar_url?: string | null;
     anime_avatar_url?: string | null;
+    // Social Media Fields
+    instagram_handle?: string | null;
+    twitter_handle?: string | null;
+    tiktok_handle?: string | null;
+    discord_username?: string | null;
+    snapchat_username?: string | null;
+    // Additional Profile Fields
+    relationship_status?: string | null;
+    occupation?: string | null;
+    height_ft?: number | null;
+    height_in?: number | null;
+    zodiac_sign?: string | null;
   };
   conversationPoints: number;
 }
@@ -254,9 +266,49 @@ export function ProfileModal({ isOpen, onClose, user, conversationPoints }: Prof
             </CardHeader>
             <CardContent>
               {isFieldUnlocked('social_media') ? (
-                <div className="flex items-center gap-2">
-                  <Share2 className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-muted-foreground text-sm">Social media profiles will be shown here</span>
+                <div className="space-y-3">
+                  {user.instagram_handle && (
+                    <div className="flex items-center gap-2">
+                      <Share2 className="w-4 h-4 text-pink-500" />
+                      <span className="text-sm font-medium">Instagram:</span>
+                      <span className="text-sm text-muted-foreground">@{user.instagram_handle}</span>
+                    </div>
+                  )}
+                  {user.twitter_handle && (
+                    <div className="flex items-center gap-2">
+                      <Share2 className="w-4 h-4 text-blue-500" />
+                      <span className="text-sm font-medium">Twitter/X:</span>
+                      <span className="text-sm text-muted-foreground">@{user.twitter_handle}</span>
+                    </div>
+                  )}
+                  {user.tiktok_handle && (
+                    <div className="flex items-center gap-2">
+                      <Share2 className="w-4 h-4 text-black" />
+                      <span className="text-sm font-medium">TikTok:</span>
+                      <span className="text-sm text-muted-foreground">@{user.tiktok_handle}</span>
+                    </div>
+                  )}
+                  {user.discord_username && (
+                    <div className="flex items-center gap-2">
+                      <Share2 className="w-4 h-4 text-indigo-500" />
+                      <span className="text-sm font-medium">Discord:</span>
+                      <span className="text-sm text-muted-foreground">{user.discord_username}</span>
+                    </div>
+                  )}
+                  {user.snapchat_username && (
+                    <div className="flex items-center gap-2">
+                      <Share2 className="w-4 h-4 text-yellow-500" />
+                      <span className="text-sm font-medium">Snapchat:</span>
+                      <span className="text-sm text-muted-foreground">{user.snapchat_username}</span>
+                    </div>
+                  )}
+                  {!user.instagram_handle && !user.twitter_handle && !user.tiktok_handle && 
+                   !user.discord_username && !user.snapchat_username && (
+                    <div className="flex items-center gap-2">
+                      <Share2 className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">No social media profiles added</span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="bg-gray-100 dark:bg-gray-800 rounded p-3 text-center">

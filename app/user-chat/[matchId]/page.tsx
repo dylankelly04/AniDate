@@ -42,6 +42,23 @@ interface Match {
     avatar_url: string | null;
     original_avatar_url?: string | null;
     anime_avatar_url?: string | null;
+    age?: number;
+    bio?: string;
+    location?: string;
+    interests?: string[];
+    college?: string;
+    // Social Media Fields
+    instagram_handle?: string | null;
+    twitter_handle?: string | null;
+    tiktok_handle?: string | null;
+    discord_username?: string | null;
+    snapchat_username?: string | null;
+    // Additional Profile Fields
+    relationship_status?: string | null;
+    occupation?: string | null;
+    height_ft?: number | null;
+    height_in?: number | null;
+    zodiac_sign?: string | null;
   };
 }
 
@@ -220,7 +237,17 @@ export default function UserChatPage() {
               bio,
               location,
               interests,
-              college
+              college,
+              instagram_handle,
+              twitter_handle,
+              tiktok_handle,
+              discord_username,
+              snapchat_username,
+              relationship_status,
+              occupation,
+              height_ft,
+              height_in,
+              zodiac_sign
             )
           `
           )
@@ -238,7 +265,7 @@ export default function UserChatPage() {
       if (matchData.user2_id === user?.id) {
         const { data: user1Profile, error: profileError } = await supabase
           .from("profiles")
-          .select("id, full_name, avatar_url, original_avatar_url, anime_avatar_url, age, bio, location, interests, college")
+          .select("id, full_name, avatar_url, original_avatar_url, anime_avatar_url, age, bio, location, interests, college, instagram_handle, twitter_handle, tiktok_handle, discord_username, snapchat_username, relationship_status, occupation, height_ft, height_in, zodiac_sign")
           .eq("id", matchData.user1_id)
           .single();
 

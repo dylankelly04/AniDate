@@ -98,6 +98,18 @@ interface ProfileData {
   aura_points: number;
   level: number;
   total_aura_earned: number;
+  // Social Media Fields
+  instagram_handle?: string | null;
+  twitter_handle?: string | null;
+  tiktok_handle?: string | null;
+  discord_username?: string | null;
+  snapchat_username?: string | null;
+  // Additional Profile Fields
+  relationship_status?: string | null;
+  occupation?: string | null;
+  height_ft?: number | null;
+  height_in?: number | null;
+  zodiac_sign?: string | null;
 }
 
 export default function ProfilePage() {
@@ -121,6 +133,21 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false);
   const [generatingAnime, setGeneratingAnime] = useState(false);
   const [showOriginalImage, setShowOriginalImage] = useState(false);
+
+  // Social Media Fields
+  const [instagramHandle, setInstagramHandle] = useState("");
+  const [twitterHandle, setTwitterHandle] = useState("");
+  const [tiktokHandle, setTiktokHandle] = useState("");
+  const [discordUsername, setDiscordUsername] = useState("");
+  const [snapchatUsername, setSnapchatUsername] = useState("");
+  
+  
+  // Additional Profile Fields
+  const [relationshipStatus, setRelationshipStatus] = useState("");
+  const [occupation, setOccupation] = useState("");
+  const [heightFt, setHeightFt] = useState("");
+  const [heightIn, setHeightIn] = useState("");
+  const [zodiacSign, setZodiacSign] = useState("");
 
   // Preferences state
   const [preferences, setPreferences] = useState({
@@ -179,6 +206,21 @@ export default function ProfilePage() {
       setGender(data.gender || "");
       setLookingFor(data.looking_for || "");
       setInterests(data.interests || []);
+      
+      // Populate social media fields
+      setInstagramHandle(data.instagram_handle || "");
+      setTwitterHandle(data.twitter_handle || "");
+      setTiktokHandle(data.tiktok_handle || "");
+      setDiscordUsername(data.discord_username || "");
+      setSnapchatUsername(data.snapchat_username || "");
+      
+      
+      // Populate additional profile fields
+      setRelationshipStatus(data.relationship_status || "");
+      setOccupation(data.occupation || "");
+      setHeightFt(data.height_ft?.toString() || "");
+      setHeightIn(data.height_in?.toString() || "");
+      setZodiacSign(data.zodiac_sign || "");
     } catch (err) {
       setError("Failed to load profile");
     } finally {
@@ -315,6 +357,18 @@ export default function ProfilePage() {
         gender: gender || null,
         looking_for: lookingFor || null,
         interests: interests,
+        // Social Media Fields
+        instagram_handle: instagramHandle.trim() || null,
+        twitter_handle: twitterHandle.trim() || null,
+        tiktok_handle: tiktokHandle.trim() || null,
+        discord_username: discordUsername.trim() || null,
+        snapchat_username: snapchatUsername.trim() || null,
+        // Additional Profile Fields
+        relationship_status: relationshipStatus || null,
+        occupation: occupation.trim() || null,
+        height_ft: heightFt ? parseInt(heightFt) : null,
+        height_in: heightIn ? parseInt(heightIn) : null,
+        zodiac_sign: zodiacSign || null,
       };
 
       console.log("Updating profile with data:", updateData);
@@ -1037,6 +1091,204 @@ export default function ProfilePage() {
                         <p className="text-sm text-muted-foreground mt-1">
                           {profile.email}
                         </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Social Media */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Social Media</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label>Instagram</Label>
+                          {editing ? (
+                            <Input
+                              value={instagramHandle}
+                              onChange={(e) => setInstagramHandle(e.target.value)}
+                              placeholder="@username"
+                              className="mt-1"
+                            />
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {profile.instagram_handle || "Not provided"}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <Label>Twitter/X</Label>
+                          {editing ? (
+                            <Input
+                              value={twitterHandle}
+                              onChange={(e) => setTwitterHandle(e.target.value)}
+                              placeholder="@username"
+                              className="mt-1"
+                            />
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {profile.twitter_handle || "Not provided"}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <Label>TikTok</Label>
+                          {editing ? (
+                            <Input
+                              value={tiktokHandle}
+                              onChange={(e) => setTiktokHandle(e.target.value)}
+                              placeholder="@username"
+                              className="mt-1"
+                            />
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {profile.tiktok_handle || "Not provided"}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <Label>Discord</Label>
+                          {editing ? (
+                            <Input
+                              value={discordUsername}
+                              onChange={(e) => setDiscordUsername(e.target.value)}
+                              placeholder="username#1234"
+                              className="mt-1"
+                            />
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {profile.discord_username || "Not provided"}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <Label>Snapchat</Label>
+                          {editing ? (
+                            <Input
+                              value={snapchatUsername}
+                              onChange={(e) => setSnapchatUsername(e.target.value)}
+                              placeholder="username"
+                              className="mt-1"
+                            />
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {profile.snapchat_username || "Not provided"}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Additional Information */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Additional Information</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label>Occupation</Label>
+                          {editing ? (
+                            <Input
+                              value={occupation}
+                              onChange={(e) => setOccupation(e.target.value)}
+                              placeholder="Your job title"
+                              className="mt-1"
+                            />
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {profile.occupation || "Not provided"}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <Label>Height</Label>
+                          {editing ? (
+                            <div className="flex gap-2 mt-1">
+                              <div className="flex-1">
+                                <Input
+                                  type="number"
+                                  value={heightFt}
+                                  onChange={(e) => setHeightFt(e.target.value)}
+                                  placeholder="5"
+                                  min="3"
+                                  max="8"
+                                />
+                                <Label className="text-xs text-muted-foreground mt-1">Feet</Label>
+                              </div>
+                              <div className="flex-1">
+                                <Input
+                                  type="number"
+                                  value={heightIn}
+                                  onChange={(e) => setHeightIn(e.target.value)}
+                                  placeholder="8"
+                                  min="0"
+                                  max="11"
+                                />
+                                <Label className="text-xs text-muted-foreground mt-1">Inches</Label>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {profile.height_ft && profile.height_in !== null 
+                                ? `${profile.height_ft}'${profile.height_in}"` 
+                                : profile.height_ft 
+                                ? `${profile.height_ft}'0"`
+                                : "Not provided"}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <Label>Relationship Status</Label>
+                          {editing ? (
+                            <Select value={relationshipStatus} onValueChange={setRelationshipStatus}>
+                              <SelectTrigger className="mt-1">
+                                <SelectValue placeholder="Select status" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="single">Single</SelectItem>
+                                <SelectItem value="dating">Dating</SelectItem>
+                                <SelectItem value="relationship">In a relationship</SelectItem>
+                                <SelectItem value="complicated">It's complicated</SelectItem>
+                                <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {profile.relationship_status || "Not provided"}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <Label>Zodiac Sign</Label>
+                          {editing ? (
+                            <Select value={zodiacSign} onValueChange={setZodiacSign}>
+                              <SelectTrigger className="mt-1">
+                                <SelectValue placeholder="Select sign" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="aries">Aries</SelectItem>
+                                <SelectItem value="taurus">Taurus</SelectItem>
+                                <SelectItem value="gemini">Gemini</SelectItem>
+                                <SelectItem value="cancer">Cancer</SelectItem>
+                                <SelectItem value="leo">Leo</SelectItem>
+                                <SelectItem value="virgo">Virgo</SelectItem>
+                                <SelectItem value="libra">Libra</SelectItem>
+                                <SelectItem value="scorpio">Scorpio</SelectItem>
+                                <SelectItem value="sagittarius">Sagittarius</SelectItem>
+                                <SelectItem value="capricorn">Capricorn</SelectItem>
+                                <SelectItem value="aquarius">Aquarius</SelectItem>
+                                <SelectItem value="pisces">Pisces</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {profile.zodiac_sign || "Not provided"}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
