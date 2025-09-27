@@ -136,9 +136,11 @@ export default function HomescreenPage() {
                 Meet real people through beautiful anime filters. Make genuine
                 connections in a comfortable environment.
               </p>
-              <Button className="w-full" size="lg" variant="secondary">
-                Find Matches
-                <Users className="w-4 h-4 ml-2" />
+              <Button className="w-full" size="lg" variant="secondary" asChild>
+                <Link href="/dashboard">
+                  Find Matches
+                  <Users className="w-4 h-4 ml-2" />
+                </Link>
               </Button>
             </div>
           </div>
