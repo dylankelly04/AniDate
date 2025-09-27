@@ -37,8 +37,17 @@ export const PROFILE_UNLOCK_LEVELS: ProfileUnlockLevel[] = [
     pointsRequired: 200,
     unlocks: ["real_photo"],
     description: "Real (non-AI) photo"
+  },
+  {
+    level: 6,
+    pointsRequired: 1000,
+    unlocks: ["video_chat"],
+    description: "Video chat feature"
   }
 ];
+
+// Video chat unlock threshold
+export const VIDEO_CHAT_UNLOCK_POINTS = 1000;
 
 export class ConversationPointsService {
   private supabase = createClient();
@@ -169,6 +178,10 @@ export class ConversationPointsService {
    */
   getFutureUnlocks(points: number): ProfileUnlockLevel[] {
     return PROFILE_UNLOCK_LEVELS.filter(level => points < level.pointsRequired);
+  }
+
+  canInitiateVideoCall(points: number): boolean {
+    return points >= VIDEO_CHAT_UNLOCK_POINTS;
   }
 }
 

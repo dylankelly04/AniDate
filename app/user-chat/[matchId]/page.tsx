@@ -9,14 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Heart, Send, ArrowLeft, MessageCircle, User, X, Eye, EyeOff } from "lucide-react";
+import { Heart, Send, ArrowLeft, MessageCircle, User, X, Eye, EyeOff, Video } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { HorizontalSuggestions } from "@/components/ui/horizontal-suggestions";
 import { generateRealPersonSuggestions } from "@/lib/ai-assistant-service";
 import { ConversationPointsDisplay } from "@/components/ui/conversation-points-display";
-import { conversationPointsService } from "@/lib/conversation-points-service";
+import { conversationPointsService, VIDEO_CHAT_UNLOCK_POINTS } from "@/lib/conversation-points-service";
+import { VideoCallModal } from "@/components/ui/video-call-modal";
 import { ProfileModal } from "@/components/ui/profile-modal";
 
 interface Message {
@@ -78,6 +79,11 @@ export default function UserChatPage() {
   const [showFullSizeImage, setShowFullSizeImage] = useState(false);
   const [showOriginalImage, setShowOriginalImage] = useState(false);
   const [showNewMessageIndicator, setShowNewMessageIndicator] = useState(false);
+  const [showVideoCall, setShowVideoCall] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<{
+    fromUserId: string;
+    offer?: RTCSessionDescriptionInit;
+  } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
@@ -650,6 +656,31 @@ export default function UserChatPage() {
                 />
               )}
 
+              {/* Video Call Button */}
+              {user && match?.matched_user && conversationPoints >= 10 && (
+                <Card className="bg-gradient-to-r from-green-500/10 to-blue-500/10 border-green-500/20">
+                  <CardContent className="p-4">
+                    <div className="text-center space-y-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <Video className="w-5 h-5 text-green-600" />
+                        <h3 className="font-semibold text-green-700">Video Chat Unlocked!</h3>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        You've earned enough points to start a video call
+                      </p>
+                      <Button 
+                        onClick={() => setShowVideoCall(true)}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white"
+                        size="sm"
+                      >
+                        <Video className="w-4 h-4 mr-2" />
+                        Start Video Call
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* AI Suggestions Panel */}
               <Card className="bg-background/80 backdrop-blur-sm border-border/50 flex flex-col relative min-h-[240px]">
                 <CardContent className="p-6 flex-1 flex flex-col">
@@ -770,6 +801,32 @@ export default function UserChatPage() {
             </div>
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* Video Call Modal */}
+      {match?.matched_user && user && (
+        <VideoCallModal
+          isOpen={showVideoCall}
+          onClose={() => setShowVideoCall(false)}
+          matchId={matchId}
+          userId={user.id}
+          remoteUserId={match.matched_user.id}
+          remoteUserName={match.matched_user.full_name}
+        />
+      )}
+
+      {/* Incoming Call Modal */}
+      {incomingCall && match?.matched_user && user && (
+        <VideoCallModal
+          isOpen={true}
+          onClose={() => setIncomingCall(null)}
+          matchId={matchId}
+          userId={user.id}
+          remoteUserId={incomingCall.fromUserId}
+          remoteUserName={match.matched_user.full_name}
+          isIncoming={true}
+          incomingOffer={incomingCall.offer}
+        />
       )}
     </div>
   );
