@@ -8,16 +8,49 @@ import {
   Users,
   Settings,
   LogOut,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useClientOnly } from "@/hooks/use-client-only";
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { CompactXPBar } from "@/components/ui/xp-bar";
 
 export default function HomescreenPage() {
   const { user, signOut } = useAuth();
   const router = useRouter();
   const mounted = useClientOnly();
+  const supabase = createClient();
+
+  const [profile, setProfile] = useState<{
+    aura_points: number;
+    level: number;
+    total_aura_earned: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      fetchProfile();
+    }
+  }, [user]);
+
+  const fetchProfile = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("aura_points, level, total_aura_earned")
+        .eq("id", user?.id)
+        .single();
+
+      if (data) {
+        setProfile(data);
+      }
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+    }
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -160,6 +193,45 @@ export default function HomescreenPage() {
               </Button>
             </div>
           </div>
+
+          {/* Aura Points Section */}
+          {profile && (
+            <div className="bg-background/80 backdrop-blur-sm border border-border/50 rounded-xl p-6 mb-8">
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="w-5 h-5 text-primary" />
+                <h3 className="text-lg font-semibold">Your Aura Progress</h3>
+              </div>
+              <CompactXPBar
+                currentXP={profile.aura_points}
+                level={profile.level}
+                className="mb-4"
+              />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-lg font-bold text-primary">
+                    {profile.aura_points.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Current Aura
+                  </div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-secondary">
+                    {profile.level}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Level</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-accent">
+                    {profile.total_aura_earned.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Total Earned
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Quick Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">

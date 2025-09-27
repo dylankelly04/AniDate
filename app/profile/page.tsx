@@ -6,10 +6,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { XPBar, LevelDisplay } from "@/components/ui/xp-bar";
 import {
   Heart,
   User,
@@ -27,14 +34,32 @@ import {
   Star,
   Users,
   MessageCircle,
+  Sparkles,
+  Trophy,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useClientOnly } from "@/hooks/use-client-only";
+import { getLevelTitle, getLevelDescription } from "@/lib/aura-utils";
 
 const INTERESTS = [
-  "Anime", "Gaming", "Music", "Art", "Photography", "Travel", "Cooking", "Sports",
-  "Reading", "Movies", "Nature", "Technology", "Fashion", "Fitness", "Dancing", "Writing"
+  "Anime",
+  "Gaming",
+  "Music",
+  "Art",
+  "Photography",
+  "Travel",
+  "Cooking",
+  "Sports",
+  "Reading",
+  "Movies",
+  "Nature",
+  "Technology",
+  "Fashion",
+  "Fitness",
+  "Dancing",
+  "Writing",
 ];
 
 const GENDER_OPTIONS = [
@@ -42,14 +67,14 @@ const GENDER_OPTIONS = [
   { value: "female", label: "Female" },
   { value: "non-binary", label: "Non-binary" },
   { value: "other", label: "Other" },
-  { value: "prefer-not-to-say", label: "Prefer not to say" }
+  { value: "prefer-not-to-say", label: "Prefer not to say" },
 ];
 
 const LOOKING_FOR_OPTIONS = [
   { value: "male", label: "Men" },
   { value: "female", label: "Women" },
   { value: "both", label: "Both" },
-  { value: "everyone", label: "Everyone" }
+  { value: "everyone", label: "Everyone" },
 ];
 
 interface ProfileData {
@@ -65,6 +90,9 @@ interface ProfileData {
   created_at: string;
   updated_at: string;
   college: string | null;
+  aura_points: number;
+  level: number;
+  total_aura_earned: number;
 }
 
 export default function ProfilePage() {
@@ -74,7 +102,8 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  
+  const mounted = useClientOnly();
+
   // Form state
   const [fullName, setFullName] = useState("");
   const [age, setAge] = useState("");
@@ -95,18 +124,18 @@ export default function ProfilePage() {
   const fetchProfile = async () => {
     try {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user?.id)
+        .from("profiles")
+        .select("*")
+        .eq("id", user?.id)
         .single();
 
       if (error) {
-        setError('Profile not found. Please complete your profile setup.');
+        setError("Profile not found. Please complete your profile setup.");
         return;
       }
 
       setProfile(data);
-      
+
       // Populate form fields
       setFullName(data.full_name || "");
       setAge(data.age?.toString() || "");
@@ -116,7 +145,7 @@ export default function ProfilePage() {
       setLookingFor(data.looking_for || "");
       setInterests(data.interests || []);
     } catch (err) {
-      setError('Failed to load profile');
+      setError("Failed to load profile");
     } finally {
       setLoading(false);
     }
@@ -130,13 +159,16 @@ export default function ProfilePage() {
 
     // Validate required fields
     if (!fullName.trim()) {
-      setError('Full name is required');
+      setError("Full name is required");
       setSaving(false);
       return;
     }
 
-    if (age && (isNaN(parseInt(age)) || parseInt(age) < 18 || parseInt(age) > 100)) {
-      setError('Age must be between 18 and 100');
+    if (
+      age &&
+      (isNaN(parseInt(age)) || parseInt(age) < 18 || parseInt(age) > 100)
+    ) {
+      setError("Age must be between 18 and 100");
       setSaving(false);
       return;
     }
@@ -152,15 +184,15 @@ export default function ProfilePage() {
         interests: interests,
       };
 
-      console.log('Updating profile with data:', updateData);
+      console.log("Updating profile with data:", updateData);
 
       const { error } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update(updateData)
-        .eq('id', user.id);
+        .eq("id", user.id);
 
       if (error) {
-        console.error('Error updating profile:', error);
+        console.error("Error updating profile:", error);
         setError(`Failed to update profile: ${error.message}`);
         return;
       }
@@ -169,8 +201,8 @@ export default function ProfilePage() {
       await fetchProfile();
       setEditing(false);
     } catch (err) {
-      console.error('Error:', err);
-      setError('Failed to update profile');
+      console.error("Error:", err);
+      setError("Failed to update profile");
     } finally {
       setSaving(false);
     }
@@ -192,14 +224,14 @@ export default function ProfilePage() {
   };
 
   const handleInterestToggle = (interest: string) => {
-    setInterests(prev => 
-      prev.includes(interest) 
-        ? prev.filter(i => i !== interest)
+    setInterests((prev) =>
+      prev.includes(interest)
+        ? prev.filter((i) => i !== interest)
         : [...prev, interest]
     );
   };
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
         <div
@@ -245,6 +277,11 @@ export default function ProfilePage() {
     );
   }
 
+  const currentLevel = profile?.level || 1;
+  const currentAura = profile?.aura_points || 0;
+  const levelTitle = getLevelTitle(currentLevel);
+  const levelDescription = getLevelDescription(currentLevel);
+
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Background */}
@@ -286,7 +323,11 @@ export default function ProfilePage() {
                 </Button>
               </>
             ) : (
-              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditing(true)}
+              >
                 <Edit3 className="w-4 h-4 mr-2" />
                 Edit Profile
               </Button>
@@ -306,6 +347,69 @@ export default function ProfilePage() {
             </Card>
           )}
 
+          {/* Aura Points Section - NEW */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-primary" />
+                Aura Points & Level
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Level Display */}
+              <div className="text-center space-y-2">
+                <LevelDisplay level={currentLevel} size="lg" />
+                <h3 className="text-lg font-semibold">{levelTitle}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {levelDescription}
+                </p>
+              </div>
+
+              {/* XP Bar */}
+              <XPBar currentXP={currentAura} level={currentLevel} size="lg" />
+
+              {/* Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                  <div className="text-2xl font-bold text-primary">
+                    {currentAura.toLocaleString()}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Total Aura Points
+                  </div>
+                </div>
+                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                  <div className="text-2xl font-bold text-secondary">
+                    {profile?.total_aura_earned?.toLocaleString() || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Lifetime Earned
+                  </div>
+                </div>
+                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                  <div className="text-2xl font-bold text-accent">
+                    {currentLevel}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Current Level
+                  </div>
+                </div>
+              </div>
+
+              {/* Next Milestone */}
+              <div className="p-4 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg border border-primary/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Trophy className="w-4 h-4 text-primary" />
+                  <span className="font-semibold">Next Milestone</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Keep practicing with AI characters to earn more aura points
+                  and level up!
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
           <Tabs defaultValue="overview" className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6">
               <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -320,7 +424,10 @@ export default function ProfilePage() {
                   <CardHeader className="text-center">
                     <div className="relative mx-auto w-32 h-32 mb-4">
                       <Avatar className="w-full h-full">
-                        <AvatarImage src={profile.avatar_url || ""} alt={profile.full_name} />
+                        <AvatarImage
+                          src={profile.avatar_url || ""}
+                          alt={profile.full_name}
+                        />
                         <AvatarFallback className="text-2xl">
                           {profile.full_name?.[0] || "?"}
                         </AvatarFallback>
@@ -335,7 +442,9 @@ export default function ProfilePage() {
                         </Button>
                       )}
                     </div>
-                    <CardTitle className="text-2xl">{profile.full_name}</CardTitle>
+                    <CardTitle className="text-2xl">
+                      {profile.full_name}
+                    </CardTitle>
                     <div className="flex items-center justify-center gap-1 text-muted-foreground">
                       <Calendar className="w-4 h-4" />
                       <span>{profile.age} years old</span>
@@ -363,18 +472,23 @@ export default function ProfilePage() {
                           </p>
                         )}
                       </div>
-                      
+
                       <div>
                         <Label className="text-sm font-medium">Interests</Label>
                         {editing ? (
                           <div className="grid grid-cols-2 gap-2 mt-2">
                             {INTERESTS.map((interest) => (
-                              <div key={interest} className="flex items-center space-x-2">
+                              <div
+                                key={interest}
+                                className="flex items-center space-x-2"
+                              >
                                 <input
                                   type="checkbox"
                                   id={interest}
                                   checked={interests.includes(interest)}
-                                  onChange={() => handleInterestToggle(interest)}
+                                  onChange={() =>
+                                    handleInterestToggle(interest)
+                                  }
                                   className="rounded"
                                 />
                                 <Label htmlFor={interest} className="text-sm">
@@ -389,7 +503,11 @@ export default function ProfilePage() {
                               <Badge key={interest} variant="secondary">
                                 {interest}
                               </Badge>
-                            )) || <span className="text-sm text-muted-foreground">No interests selected</span>}
+                            )) || (
+                              <span className="text-sm text-muted-foreground">
+                                No interests selected
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -415,7 +533,9 @@ export default function ProfilePage() {
                               className="mt-1"
                             />
                           ) : (
-                            <p className="text-sm text-muted-foreground mt-1">{profile.full_name}</p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {profile.full_name}
+                            </p>
                           )}
                         </div>
                         <div>
@@ -430,7 +550,9 @@ export default function ProfilePage() {
                               max="100"
                             />
                           ) : (
-                            <p className="text-sm text-muted-foreground mt-1">{profile.age}</p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {profile.age}
+                            </p>
                           )}
                         </div>
                       </div>
@@ -444,12 +566,16 @@ export default function ProfilePage() {
                             className="mt-1"
                           />
                         ) : (
-                          <p className="text-sm text-muted-foreground mt-1">{profile.location}</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {profile.location}
+                          </p>
                         )}
                       </div>
                       <div>
                         <Label>Email</Label>
-                        <p className="text-sm text-muted-foreground mt-1">{profile.email}</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {profile.email}
+                        </p>
                       </div>
                     </CardContent>
                   </Card>
@@ -470,7 +596,10 @@ export default function ProfilePage() {
                               </SelectTrigger>
                               <SelectContent>
                                 {GENDER_OPTIONS.map((option) => (
-                                  <SelectItem key={option.value} value={option.value}>
+                                  <SelectItem
+                                    key={option.value}
+                                    value={option.value}
+                                  >
                                     {option.label}
                                   </SelectItem>
                                 ))}
@@ -478,20 +607,28 @@ export default function ProfilePage() {
                             </Select>
                           ) : (
                             <p className="text-sm text-muted-foreground mt-1">
-                              {GENDER_OPTIONS.find(opt => opt.value === profile.gender)?.label || profile.gender}
+                              {GENDER_OPTIONS.find(
+                                (opt) => opt.value === profile.gender
+                              )?.label || profile.gender}
                             </p>
                           )}
                         </div>
                         <div>
                           <Label>Looking For</Label>
                           {editing ? (
-                            <Select value={lookingFor} onValueChange={setLookingFor}>
+                            <Select
+                              value={lookingFor}
+                              onValueChange={setLookingFor}
+                            >
                               <SelectTrigger className="mt-1">
                                 <SelectValue placeholder="Who are you looking for?" />
                               </SelectTrigger>
                               <SelectContent>
                                 {LOOKING_FOR_OPTIONS.map((option) => (
-                                  <SelectItem key={option.value} value={option.value}>
+                                  <SelectItem
+                                    key={option.value}
+                                    value={option.value}
+                                  >
                                     {option.label}
                                   </SelectItem>
                                 ))}
@@ -499,7 +636,9 @@ export default function ProfilePage() {
                             </Select>
                           ) : (
                             <p className="text-sm text-muted-foreground mt-1">
-                              {LOOKING_FOR_OPTIONS.find(opt => opt.value === profile.looking_for)?.label || profile.looking_for}
+                              {LOOKING_FOR_OPTIONS.find(
+                                (opt) => opt.value === profile.looking_for
+                              )?.label || profile.looking_for}
                             </p>
                           )}
                         </div>
@@ -515,16 +654,28 @@ export default function ProfilePage() {
                     <CardContent>
                       <div className="grid grid-cols-3 gap-4 text-center">
                         <div>
-                          <div className="text-2xl font-bold text-primary">0</div>
-                          <div className="text-sm text-muted-foreground">Matches</div>
+                          <div className="text-2xl font-bold text-primary">
+                            0
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Matches
+                          </div>
                         </div>
                         <div>
-                          <div className="text-2xl font-bold text-secondary">0</div>
-                          <div className="text-sm text-muted-foreground">Messages</div>
+                          <div className="text-2xl font-bold text-secondary">
+                            0
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Messages
+                          </div>
                         </div>
                         <div>
-                          <div className="text-2xl font-bold text-accent">0</div>
-                          <div className="text-sm text-muted-foreground">AI Chats</div>
+                          <div className="text-2xl font-bold text-accent">
+                            0
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            AI Chats
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -547,7 +698,9 @@ export default function ProfilePage() {
                   <CardContent className="space-y-6">
                     <div>
                       <Label className="text-base">Age Range</Label>
-                      <p className="text-sm text-muted-foreground mb-3">Preferred age range for matches</p>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Preferred age range for matches
+                      </p>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label className="text-sm">Min Age</Label>
@@ -574,7 +727,9 @@ export default function ProfilePage() {
 
                     <div>
                       <Label className="text-base">Distance</Label>
-                      <p className="text-sm text-muted-foreground mb-3">Maximum distance for matches</p>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Maximum distance for matches
+                      </p>
                       <Select>
                         <SelectTrigger>
                           <SelectValue placeholder="Select distance" />
@@ -593,14 +748,18 @@ export default function ProfilePage() {
 
                     <div>
                       <Label className="text-base">Relationship Type</Label>
-                      <p className="text-sm text-muted-foreground mb-3">What are you looking for?</p>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        What are you looking for?
+                      </p>
                       <Select>
                         <SelectTrigger>
                           <SelectValue placeholder="Select relationship type" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="casual">Casual Dating</SelectItem>
-                          <SelectItem value="serious">Serious Relationship</SelectItem>
+                          <SelectItem value="serious">
+                            Serious Relationship
+                          </SelectItem>
                           <SelectItem value="friendship">Friendship</SelectItem>
                           <SelectItem value="any">Open to anything</SelectItem>
                         </SelectContent>
@@ -609,16 +768,24 @@ export default function ProfilePage() {
 
                     <div>
                       <Label className="text-base">Interested In</Label>
-                      <p className="text-sm text-muted-foreground mb-3">Select all that apply</p>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Select all that apply
+                      </p>
                       <div className="grid grid-cols-2 gap-2">
                         {INTERESTS.map((interest) => (
-                          <div key={interest} className="flex items-center space-x-2">
+                          <div
+                            key={interest}
+                            className="flex items-center space-x-2"
+                          >
                             <input
                               type="checkbox"
                               id={`pref-${interest}`}
                               className="rounded"
                             />
-                            <Label htmlFor={`pref-${interest}`} className="text-sm">
+                            <Label
+                              htmlFor={`pref-${interest}`}
+                              className="text-sm"
+                            >
                               {interest}
                             </Label>
                           </div>
@@ -640,7 +807,9 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">New Matches</Label>
-                        <p className="text-sm text-muted-foreground">Get notified when someone likes you</p>
+                        <p className="text-sm text-muted-foreground">
+                          Get notified when someone likes you
+                        </p>
                       </div>
                       <Button variant="default" size="sm">
                         On
@@ -650,7 +819,9 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Messages</Label>
-                        <p className="text-sm text-muted-foreground">Get notified of new messages</p>
+                        <p className="text-sm text-muted-foreground">
+                          Get notified of new messages
+                        </p>
                       </div>
                       <Button variant="default" size="sm">
                         On
@@ -660,7 +831,9 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Profile Views</Label>
-                        <p className="text-sm text-muted-foreground">Get notified when someone views your profile</p>
+                        <p className="text-sm text-muted-foreground">
+                          Get notified when someone views your profile
+                        </p>
                       </div>
                       <Button variant="outline" size="sm">
                         Off
@@ -669,8 +842,12 @@ export default function ProfilePage() {
 
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label className="text-base">AI Practice Reminders</Label>
-                        <p className="text-sm text-muted-foreground">Reminders to practice with AI characters</p>
+                        <Label className="text-base">
+                          AI Practice Reminders
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          Reminders to practice with AI characters
+                        </p>
                       </div>
                       <Button variant="default" size="sm">
                         On
@@ -680,7 +857,9 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Weekly Summary</Label>
-                        <p className="text-sm text-muted-foreground">Weekly activity summary emails</p>
+                        <p className="text-sm text-muted-foreground">
+                          Weekly activity summary emails
+                        </p>
                       </div>
                       <Button variant="outline" size="sm">
                         Off
@@ -699,47 +878,93 @@ export default function ProfilePage() {
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div>
-                      <Label className="text-base">Preferred Character Types</Label>
-                      <p className="text-sm text-muted-foreground mb-3">What types of AI characters do you prefer?</p>
+                      <Label className="text-base">
+                        Preferred Character Types
+                      </Label>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        What types of AI characters do you prefer?
+                      </p>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="flex items-center space-x-2">
-                          <input type="checkbox" id="romantic" className="rounded" />
-                          <Label htmlFor="romantic" className="text-sm">Romantic</Label>
+                          <input
+                            type="checkbox"
+                            id="romantic"
+                            className="rounded"
+                          />
+                          <Label htmlFor="romantic" className="text-sm">
+                            Romantic
+                          </Label>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <input type="checkbox" id="friendly" className="rounded" />
-                          <Label htmlFor="friendly" className="text-sm">Friendly</Label>
+                          <input
+                            type="checkbox"
+                            id="friendly"
+                            className="rounded"
+                          />
+                          <Label htmlFor="friendly" className="text-sm">
+                            Friendly
+                          </Label>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <input type="checkbox" id="flirty" className="rounded" />
-                          <Label htmlFor="flirty" className="text-sm">Flirty</Label>
+                          <input
+                            type="checkbox"
+                            id="flirty"
+                            className="rounded"
+                          />
+                          <Label htmlFor="flirty" className="text-sm">
+                            Flirty
+                          </Label>
                         </div>
                         <div className="flex items-center space-x-2">
                           <input type="checkbox" id="shy" className="rounded" />
-                          <Label htmlFor="shy" className="text-sm">Shy</Label>
+                          <Label htmlFor="shy" className="text-sm">
+                            Shy
+                          </Label>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <input type="checkbox" id="confident" className="rounded" />
-                          <Label htmlFor="confident" className="text-sm">Confident</Label>
+                          <input
+                            type="checkbox"
+                            id="confident"
+                            className="rounded"
+                          />
+                          <Label htmlFor="confident" className="text-sm">
+                            Confident
+                          </Label>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <input type="checkbox" id="humorous" className="rounded" />
-                          <Label htmlFor="humorous" className="text-sm">Humorous</Label>
+                          <input
+                            type="checkbox"
+                            id="humorous"
+                            className="rounded"
+                          />
+                          <Label htmlFor="humorous" className="text-sm">
+                            Humorous
+                          </Label>
                         </div>
                       </div>
                     </div>
 
                     <div>
-                      <Label className="text-base">Conversation Difficulty</Label>
-                      <p className="text-sm text-muted-foreground mb-3">Choose your preferred conversation level</p>
+                      <Label className="text-base">
+                        Conversation Difficulty
+                      </Label>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Choose your preferred conversation level
+                      </p>
                       <Select>
                         <SelectTrigger>
                           <SelectValue placeholder="Select difficulty" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="beginner">Beginner - Simple conversations</SelectItem>
-                          <SelectItem value="intermediate">Intermediate - Normal conversations</SelectItem>
-                          <SelectItem value="advanced">Advanced - Complex conversations</SelectItem>
+                          <SelectItem value="beginner">
+                            Beginner - Simple conversations
+                          </SelectItem>
+                          <SelectItem value="intermediate">
+                            Intermediate - Normal conversations
+                          </SelectItem>
+                          <SelectItem value="advanced">
+                            Advanced - Complex conversations
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -747,7 +972,9 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Practice Mode</Label>
-                        <p className="text-sm text-muted-foreground">Enable practice mode for learning</p>
+                        <p className="text-sm text-muted-foreground">
+                          Enable practice mode for learning
+                        </p>
                       </div>
                       <Button variant="default" size="sm">
                         On
@@ -767,7 +994,9 @@ export default function ProfilePage() {
                   <CardContent className="space-y-6">
                     <div>
                       <Label className="text-base">Theme</Label>
-                      <p className="text-sm text-muted-foreground mb-3">Choose your preferred theme</p>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Choose your preferred theme
+                      </p>
                       <Select>
                         <SelectTrigger>
                           <SelectValue placeholder="Select theme" />
@@ -783,7 +1012,9 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Anime Filters</Label>
-                        <p className="text-sm text-muted-foreground">Enable anime-style profile filters</p>
+                        <p className="text-sm text-muted-foreground">
+                          Enable anime-style profile filters
+                        </p>
                       </div>
                       <Button variant="default" size="sm">
                         On
@@ -793,7 +1024,9 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Sound Effects</Label>
-                        <p className="text-sm text-muted-foreground">Play sounds for notifications</p>
+                        <p className="text-sm text-muted-foreground">
+                          Play sounds for notifications
+                        </p>
                       </div>
                       <Button variant="default" size="sm">
                         On
@@ -803,7 +1036,9 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Vibration</Label>
-                        <p className="text-sm text-muted-foreground">Vibrate for notifications</p>
+                        <p className="text-sm text-muted-foreground">
+                          Vibrate for notifications
+                        </p>
                       </div>
                       <Button variant="outline" size="sm">
                         Off
@@ -813,7 +1048,9 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Location Services</Label>
-                        <p className="text-sm text-muted-foreground">Use location for nearby matches</p>
+                        <p className="text-sm text-muted-foreground">
+                          Use location for nearby matches
+                        </p>
                       </div>
                       <Button variant="default" size="sm">
                         On
@@ -823,7 +1060,6 @@ export default function ProfilePage() {
                 </Card>
               </div>
             </TabsContent>
-
           </Tabs>
         </div>
       </main>

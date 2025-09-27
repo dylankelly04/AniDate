@@ -6,9 +6,11 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Heart, ArrowLeft, Send, User, Bot } from "lucide-react";
+import { Heart, ArrowLeft, Send, User, Bot, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useClientOnly } from "@/hooks/use-client-only";
+import { useAuth } from "@/lib/auth-context";
+import { processChatSession, addAuraPoints } from "@/lib/aura-service";
 
 interface AnimeCharacter {
   id: string;
@@ -36,12 +38,14 @@ export default function ChatPage() {
   const supabase = createClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const mounted = useClientOnly();
+  const { user } = useAuth();
 
   const [character, setCharacter] = useState<AnimeCharacter | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [sessionCompleted, setSessionCompleted] = useState(false);
 
   const characterId = params.characterId as string;
 
@@ -104,6 +108,25 @@ export default function ChatPage() {
     setSending(true);
 
     try {
+      // Award 1 aura point for sending a message
+      if (user) {
+        try {
+          const result = await addAuraPoints(
+            user.id,
+            1,
+            `Message to ${character.name}`
+          );
+
+          if (result.success && result.levelUp) {
+            toast.success(`🎉 Level up! You're now level ${result.newLevel}!`, {
+              duration: 5000,
+            });
+          }
+        } catch (error) {
+          console.error("Error awarding aura for message:", error);
+        }
+      }
+
       // For now, we'll simulate an AI response
       // In a real implementation, you'd call an AI API like OpenAI
       const response = await simulateAIResponse(newMessage, character);
@@ -143,6 +166,39 @@ export default function ChatPage() {
     ];
 
     return responses[Math.floor(Math.random() * responses.length)];
+  };
+
+  const completeChatSession = async () => {
+    if (!user || !character || messages.length < 2 || sessionCompleted) return;
+
+    try {
+      const result = await processChatSession(
+        user.id,
+        character.id,
+        character.name,
+        messages.map((msg) => ({ role: msg.role, content: msg.content }))
+      );
+
+      if (result.success) {
+        setSessionCompleted(true);
+
+        if (result.levelUp) {
+          toast.success(
+            `🎉 Level Up! You're now level ${result.newLevel}! +${result.pointsAdded} aura points`,
+            { duration: 5000 }
+          );
+        } else {
+          toast.success(
+            `✨ Great conversation! +${result.pointsAdded} aura points earned`,
+            { duration: 3000 }
+          );
+        }
+      } else {
+        console.error("Failed to process chat session:", result.error);
+      }
+    } catch (error) {
+      console.error("Error completing chat session:", error);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -327,6 +383,48 @@ export default function ChatPage() {
                     <Send className="w-4 h-4" />
                   </Button>
                 </div>
+
+                {/* Complete Session Button */}
+                {messages.length >= 4 && !sessionCompleted && (
+                  <div className="mt-4 p-4 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg border border-primary/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-medium">
+                          Ready to earn aura points?
+                        </span>
+                      </div>
+                      <Button
+                        onClick={completeChatSession}
+                        size="sm"
+                        className="bg-primary hover:bg-primary/90"
+                      >
+                        Complete Session
+                        <Sparkles className="w-3 h-3 ml-1" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Complete this conversation to earn aura points and level
+                      up!
+                    </p>
+                  </div>
+                )}
+
+                {/* Session Completed */}
+                {sessionCompleted && (
+                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center gap-2 text-green-700">
+                      <Sparkles className="w-4 h-4" />
+                      <span className="text-sm font-medium">
+                        Session Completed!
+                      </span>
+                    </div>
+                    <p className="text-xs text-green-600 mt-1">
+                      You've earned aura points for this conversation. Keep
+                      chatting to earn more!
+                    </p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
