@@ -233,7 +233,7 @@ export default function HomescreenPage() {
               className="h-16 text-base"
               asChild
             >
-              <Link href="/speeddate">
+              <Link href="/speeddate-cedar">
                 <Heart className="w-5 h-5 mr-2" />
                 Speeddate Mode
               </Link>
