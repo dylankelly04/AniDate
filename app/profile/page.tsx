@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTheme } from "next-themes";
+import { soundManager } from "@/lib/sounds";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -97,6 +100,7 @@ interface ProfileData {
 
 export default function ProfilePage() {
   const { user } = useAuth();
+  const { setTheme } = useTheme();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -113,11 +117,37 @@ export default function ProfilePage() {
   const [lookingFor, setLookingFor] = useState("");
   const [interests, setInterests] = useState<string[]>([]);
 
+  // Preferences state
+  const [preferences, setPreferences] = useState({
+    // Dating preferences
+    ageRangeMin: 18,
+    ageRangeMax: 30,
+    maxDistance: 25,
+    relationshipType: "any",
+    interestedIn: [] as string[],
+    
+    // Notification preferences
+    newMatches: true,
+    messages: true,
+    profileViews: false,
+    aiPracticeReminders: true,
+    weeklySummary: false,
+    
+    // AI Practice preferences
+    characterTypes: [] as string[],
+    conversationDifficulty: "intermediate",
+    
+    // App preferences
+    theme: "system",
+    soundEffects: true,
+  });
+
   const supabase = createClient();
 
   useEffect(() => {
     if (user) {
       fetchProfile();
+      fetchPreferences();
     }
   }, [user]);
 
@@ -150,6 +180,104 @@ export default function ProfilePage() {
       setLoading(false);
     }
   };
+
+  const fetchPreferences = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('preference_key, preference_value')
+        .eq('user_id', user?.id);
+
+      if (error) {
+        console.error('Error fetching preferences:', error);
+        return;
+      }
+
+      // Convert preferences array to object
+      const prefs: any = {};
+      data?.forEach(pref => {
+        const key = pref.preference_key;
+        let value = pref.preference_value;
+        
+        // Parse JSON values
+        if (value && (value.startsWith('[') || value.startsWith('{'))) {
+          try {
+            value = JSON.parse(value);
+          } catch (e) {
+            // Keep as string if parsing fails
+          }
+        }
+        
+        // Convert string booleans to actual booleans
+        if (value === 'true') value = true;
+        if (value === 'false') value = false;
+        
+        // Convert string numbers to actual numbers
+        if (typeof value === 'string' && !isNaN(Number(value))) {
+          value = Number(value);
+        }
+        
+        prefs[key] = value;
+      });
+
+      setPreferences(prev => ({ ...prev, ...prefs }));
+      
+      // Apply theme if it exists in preferences
+      if (prefs.theme) {
+        setTheme(prefs.theme);
+      }
+      
+      // Apply sound effects setting
+      if (typeof prefs.soundEffects === 'boolean') {
+        soundManager.setEnabled(prefs.soundEffects);
+      }
+    } catch (err) {
+      console.error('Exception in fetchPreferences:', err);
+    }
+  };
+
+  const savePreferences = async () => {
+    try {
+      const preferencesArray = Object.entries(preferences).map(([key, value]) => ({
+        user_id: user?.id,
+        preference_key: key,
+        preference_value: typeof value === 'object' ? JSON.stringify(value) : String(value)
+      }));
+
+      // Delete existing preferences first
+      await supabase
+        .from('user_preferences')
+        .delete()
+        .eq('user_id', user?.id);
+
+      // Insert new preferences
+      const { error } = await supabase
+        .from('user_preferences')
+        .insert(preferencesArray);
+
+      if (error) {
+        console.error('Error saving preferences:', error);
+        setError('Failed to save preferences');
+        return;
+      }
+
+      console.log('Preferences saved successfully');
+    } catch (err) {
+      console.error('Exception in savePreferences:', err);
+      setError('Failed to save preferences');
+    }
+  };
+
+  // Auto-save preferences when they change
+  useEffect(() => {
+    if (user && preferences) {
+      const timeoutId = setTimeout(() => {
+        savePreferences();
+      }, 1000); // Auto-save after 1 second of no changes
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [preferences, user]);
 
   const handleSave = async () => {
     if (!user || !profile) return;
@@ -196,6 +324,9 @@ export default function ProfilePage() {
         setError(`Failed to update profile: ${error.message}`);
         return;
       }
+
+      // Save preferences
+      await savePreferences();
 
       // Refresh profile data
       await fetchProfile();
@@ -585,9 +716,7 @@ export default function ProfilePage() {
                       </div>
                       <div>
                         <Label>Email</Label>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {profile.email}
-                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">{profile.email}</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -722,6 +851,8 @@ export default function ProfilePage() {
                             min="18"
                             max="100"
                             className="mt-1"
+                            value={preferences.ageRangeMin}
+                            onChange={(e) => setPreferences(prev => ({ ...prev, ageRangeMin: parseInt(e.target.value) || 18 }))}
                           />
                         </div>
                         <div>
@@ -732,6 +863,8 @@ export default function ProfilePage() {
                             min="18"
                             max="100"
                             className="mt-1"
+                            value={preferences.ageRangeMax}
+                            onChange={(e) => setPreferences(prev => ({ ...prev, ageRangeMax: parseInt(e.target.value) || 30 }))}
                           />
                         </div>
                       </div>
@@ -739,9 +872,7 @@ export default function ProfilePage() {
 
                     <div>
                       <Label className="text-base">Distance</Label>
-                      <p className="text-sm text-muted-foreground mb-3">
-                        Maximum distance for matches
-                      </p>
+                      <p className="text-sm text-muted-foreground mb-3">Maximum distance for matches</p>
                       <Select>
                         <SelectTrigger>
                           <SelectValue placeholder="Select distance" />
@@ -753,16 +884,14 @@ export default function ProfilePage() {
                           <SelectItem value="25">25 miles</SelectItem>
                           <SelectItem value="50">50 miles</SelectItem>
                           <SelectItem value="100">100 miles</SelectItem>
-                          <SelectItem value="any">Any distance</SelectItem>
+                          <SelectItem value="999">Any distance</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
                     <div>
                       <Label className="text-base">Relationship Type</Label>
-                      <p className="text-sm text-muted-foreground mb-3">
-                        What are you looking for?
-                      </p>
+                      <p className="text-sm text-muted-foreground mb-3">What are you looking for?</p>
                       <Select>
                         <SelectTrigger>
                           <SelectValue placeholder="Select relationship type" />
@@ -785,14 +914,18 @@ export default function ProfilePage() {
                       </p>
                       <div className="grid grid-cols-2 gap-2">
                         {INTERESTS.map((interest) => (
-                          <div
-                            key={interest}
-                            className="flex items-center space-x-2"
-                          >
+                          <div key={interest} className="flex items-center space-x-2">
                             <input
                               type="checkbox"
                               id={`pref-${interest}`}
-                              className="rounded"
+                              checked={preferences.interestedIn.includes(interest)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setPreferences(prev => ({ ...prev, interestedIn: [...prev.interestedIn, interest] }));
+                                } else {
+                                  setPreferences(prev => ({ ...prev, interestedIn: prev.interestedIn.filter(i => i !== interest) }));
+                                }
+                              }}
                             />
                             <Label
                               htmlFor={`pref-${interest}`}
@@ -823,8 +956,12 @@ export default function ProfilePage() {
                           Get notified when someone likes you
                         </p>
                       </div>
-                      <Button variant="default" size="sm">
-                        On
+                      <Button 
+                        variant={preferences.newMatches ? "default" : "outline"} 
+                        size="sm"
+                        onClick={() => setPreferences(prev => ({ ...prev, newMatches: !prev.newMatches }))}
+                      >
+                        {preferences.newMatches ? "On" : "Off"}
                       </Button>
                     </div>
 
@@ -835,8 +972,12 @@ export default function ProfilePage() {
                           Get notified of new messages
                         </p>
                       </div>
-                      <Button variant="default" size="sm">
-                        On
+                      <Button 
+                        variant={preferences.messages ? "default" : "outline"} 
+                        size="sm"
+                        onClick={() => setPreferences(prev => ({ ...prev, messages: !prev.messages }))}
+                      >
+                        {preferences.messages ? "On" : "Off"}
                       </Button>
                     </div>
 
@@ -847,8 +988,12 @@ export default function ProfilePage() {
                           Get notified when someone views your profile
                         </p>
                       </div>
-                      <Button variant="outline" size="sm">
-                        Off
+                      <Button 
+                        variant={preferences.profileViews ? "default" : "outline"} 
+                        size="sm"
+                        onClick={() => setPreferences(prev => ({ ...prev, profileViews: !prev.profileViews }))}
+                      >
+                        {preferences.profileViews ? "On" : "Off"}
                       </Button>
                     </div>
 
@@ -861,8 +1006,12 @@ export default function ProfilePage() {
                           Reminders to practice with AI characters
                         </p>
                       </div>
-                      <Button variant="default" size="sm">
-                        On
+                      <Button 
+                        variant={preferences.aiPracticeReminders ? "default" : "outline"} 
+                        size="sm"
+                        onClick={() => setPreferences(prev => ({ ...prev, aiPracticeReminders: !prev.aiPracticeReminders }))}
+                      >
+                        {preferences.aiPracticeReminders ? "On" : "Off"}
                       </Button>
                     </div>
 
@@ -873,8 +1022,12 @@ export default function ProfilePage() {
                           Weekly activity summary emails
                         </p>
                       </div>
-                      <Button variant="outline" size="sm">
-                        Off
+                      <Button 
+                        variant={preferences.weeklySummary ? "default" : "outline"} 
+                        size="sm"
+                        onClick={() => setPreferences(prev => ({ ...prev, weeklySummary: !prev.weeklySummary }))}
+                      >
+                        {preferences.weeklySummary ? "On" : "Off"}
                       </Button>
                     </div>
                   </CardContent>
@@ -984,9 +1137,7 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Practice Mode</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Enable practice mode for learning
-                        </p>
+                        <p className="text-sm text-muted-foreground">Enable practice mode for learning</p>
                       </div>
                       <Button variant="default" size="sm">
                         On
@@ -1006,9 +1157,7 @@ export default function ProfilePage() {
                   <CardContent className="space-y-6">
                     <div>
                       <Label className="text-base">Theme</Label>
-                      <p className="text-sm text-muted-foreground mb-3">
-                        Choose your preferred theme
-                      </p>
+                      <p className="text-sm text-muted-foreground mb-3">Choose your preferred theme</p>
                       <Select>
                         <SelectTrigger>
                           <SelectValue placeholder="Select theme" />
@@ -1016,7 +1165,7 @@ export default function ProfilePage() {
                         <SelectContent>
                           <SelectItem value="light">Light Mode</SelectItem>
                           <SelectItem value="dark">Dark Mode</SelectItem>
-                          <SelectItem value="auto">Auto (System)</SelectItem>
+                          <SelectItem value="system">Auto (System)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1024,9 +1173,7 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Anime Filters</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Enable anime-style profile filters
-                        </p>
+                        <p className="text-sm text-muted-foreground">Enable anime-style profile filters</p>
                       </div>
                       <Button variant="default" size="sm">
                         On
@@ -1036,21 +1183,25 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Sound Effects</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Play sounds for notifications
-                        </p>
+                        <p className="text-sm text-muted-foreground">Play sounds for notifications</p>
                       </div>
-                      <Button variant="default" size="sm">
-                        On
+                      <Button 
+                        variant={preferences.soundEffects ? "default" : "outline"} 
+                        size="sm"
+                        onClick={() => {
+                          const newValue = !preferences.soundEffects;
+                          setPreferences(prev => ({ ...prev, soundEffects: newValue }));
+                          soundManager.setEnabled(newValue);
+                        }}
+                      >
+                        {preferences.soundEffects ? "On" : "Off"}
                       </Button>
                     </div>
 
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Vibration</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Vibrate for notifications
-                        </p>
+                        <p className="text-sm text-muted-foreground">Vibrate for notifications</p>
                       </div>
                       <Button variant="outline" size="sm">
                         Off
@@ -1060,9 +1211,7 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Location Services</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Use location for nearby matches
-                        </p>
+                        <p className="text-sm text-muted-foreground">Use location for nearby matches</p>
                       </div>
                       <Button variant="default" size="sm">
                         On

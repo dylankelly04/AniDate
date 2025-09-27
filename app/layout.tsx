@@ -5,6 +5,7 @@ import { GeistMono } from "geist/font/mono";
 import { Analytics } from "@vercel/analytics/next";
 import { Suspense } from "react";
 import { AuthProvider } from "@/lib/auth-context";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "sonner";
 import "./globals.css";
 
@@ -25,11 +26,18 @@ export default function RootLayout({
       <body
         className={`font-sans ${GeistSans.variable} ${GeistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          <Suspense fallback={null}>{children}</Suspense>
-          <Analytics />
-          <Toaster richColors position="bottom-right" />
-        </AuthProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <AuthProvider>
+            <Suspense fallback={null}>{children}</Suspense>
+            <Analytics />
+            <Toaster richColors position="bottom-right" />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
