@@ -1,0 +1,832 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Heart,
+  User,
+  Settings,
+  ArrowLeft,
+  Edit3,
+  Save,
+  X,
+  MapPin,
+  Calendar,
+  Mail,
+  Eye,
+  EyeOff,
+  Camera,
+  Star,
+  Users,
+  MessageCircle,
+} from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
+
+const INTERESTS = [
+  "Anime", "Gaming", "Music", "Art", "Photography", "Travel", "Cooking", "Sports",
+  "Reading", "Movies", "Nature", "Technology", "Fashion", "Fitness", "Dancing", "Writing"
+];
+
+const GENDER_OPTIONS = [
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+  { value: "non-binary", label: "Non-binary" },
+  { value: "other", label: "Other" },
+  { value: "prefer-not-to-say", label: "Prefer not to say" }
+];
+
+const LOOKING_FOR_OPTIONS = [
+  { value: "male", label: "Men" },
+  { value: "female", label: "Women" },
+  { value: "both", label: "Both" },
+  { value: "everyone", label: "Everyone" }
+];
+
+interface ProfileData {
+  id: string;
+  full_name: string;
+  age: number;
+  location: string;
+  bio: string;
+  gender: string;
+  looking_for: string;
+  interests: string[];
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+  college: string | null;
+}
+
+export default function ProfilePage() {
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  
+  // Form state
+  const [fullName, setFullName] = useState("");
+  const [age, setAge] = useState("");
+  const [location, setLocation] = useState("");
+  const [bio, setBio] = useState("");
+  const [gender, setGender] = useState("");
+  const [lookingFor, setLookingFor] = useState("");
+  const [interests, setInterests] = useState<string[]>([]);
+
+  const supabase = createClient();
+
+  useEffect(() => {
+    if (user) {
+      fetchProfile();
+    }
+  }, [user]);
+
+  const fetchProfile = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user?.id)
+        .single();
+
+      if (error) {
+        setError('Profile not found. Please complete your profile setup.');
+        return;
+      }
+
+      setProfile(data);
+      
+      // Populate form fields
+      setFullName(data.full_name || "");
+      setAge(data.age?.toString() || "");
+      setLocation(data.location || "");
+      setBio(data.bio || "");
+      setGender(data.gender || "");
+      setLookingFor(data.looking_for || "");
+      setInterests(data.interests || []);
+    } catch (err) {
+      setError('Failed to load profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user || !profile) return;
+
+    setSaving(true);
+    setError("");
+
+    // Validate required fields
+    if (!fullName.trim()) {
+      setError('Full name is required');
+      setSaving(false);
+      return;
+    }
+
+    if (age && (isNaN(parseInt(age)) || parseInt(age) < 18 || parseInt(age) > 100)) {
+      setError('Age must be between 18 and 100');
+      setSaving(false);
+      return;
+    }
+
+    try {
+      const updateData = {
+        full_name: fullName.trim(),
+        age: age ? parseInt(age) : null,
+        location: location.trim(),
+        bio: bio.trim(),
+        gender: gender || null,
+        looking_for: lookingFor || null,
+        interests: interests,
+      };
+
+      console.log('Updating profile with data:', updateData);
+
+      const { error } = await supabase
+        .from('profiles')
+        .update(updateData)
+        .eq('id', user.id);
+
+      if (error) {
+        console.error('Error updating profile:', error);
+        setError(`Failed to update profile: ${error.message}`);
+        return;
+      }
+
+      // Refresh profile data
+      await fetchProfile();
+      setEditing(false);
+    } catch (err) {
+      console.error('Error:', err);
+      setError('Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    if (profile) {
+      // Reset form to original values
+      setFullName(profile.full_name || "");
+      setAge(profile.age?.toString() || "");
+      setLocation(profile.location || "");
+      setBio(profile.bio || "");
+      setGender(profile.gender || "");
+      setLookingFor(profile.looking_for || "");
+      setInterests(profile.interests || []);
+    }
+    setEditing(false);
+    setError("");
+  };
+
+  const handleInterestToggle = (interest: string) => {
+    setInterests(prev => 
+      prev.includes(interest) 
+        ? prev.filter(i => i !== interest)
+        : [...prev, interest]
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
+        <div
+          className="absolute inset-0 opacity-10 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: "url('/cute-anime-landscape.jpg')",
+          }}
+        />
+        <Card className="w-full max-w-md relative z-10 backdrop-blur-sm bg-background/80 border-border/50">
+          <CardContent className="pt-6 text-center">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <Heart className="w-5 h-5 text-primary-foreground" />
+            </div>
+            <p className="text-muted-foreground">Loading your profile...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
+        <div
+          className="absolute inset-0 opacity-10 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: "url('/cute-anime-landscape.jpg')",
+          }}
+        />
+        <Card className="w-full max-w-md relative z-10 backdrop-blur-sm bg-background/80 border-border/50">
+          <CardContent className="pt-6 text-center">
+            <User className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+            <h2 className="text-2xl font-bold mb-2">Profile Not Found</h2>
+            <p className="text-muted-foreground mb-4">
+              We couldn't find your profile. Please try refreshing the page.
+            </p>
+            <Button onClick={() => window.location.reload()}>
+              Refresh Page
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Background */}
+      <div
+        className="absolute inset-0 opacity-10 bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: "url('/cute-anime-landscape.jpg')",
+        }}
+      />
+
+      {/* Header */}
+      <header className="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-50 relative">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/homescreen">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Link>
+            </Button>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                <Heart className="w-5 h-5 text-primary-foreground" />
+              </div>
+              <span className="text-xl font-bold text-foreground">AniDate</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {editing ? (
+              <>
+                <Button variant="outline" size="sm" onClick={handleCancel}>
+                  <X className="w-4 h-4 mr-2" />
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={handleSave} disabled={saving}>
+                  <Save className="w-4 h-4 mr-2" />
+                  {saving ? "Saving..." : "Save"}
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+                <Edit3 className="w-4 h-4 mr-2" />
+                Edit Profile
+              </Button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="container mx-auto px-4 py-8 relative z-10">
+        <div className="max-w-4xl mx-auto">
+          {error && (
+            <Card className="mb-6 border-red-200 bg-red-50">
+              <CardContent className="pt-6">
+                <p className="text-red-600">{error}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          <Tabs defaultValue="overview" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="preferences">Preferences</TabsTrigger>
+            </TabsList>
+
+            {/* Overview Tab */}
+            <TabsContent value="overview" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Profile Card */}
+                <Card className="lg:col-span-1">
+                  <CardHeader className="text-center">
+                    <div className="relative mx-auto w-32 h-32 mb-4">
+                      <Avatar className="w-full h-full">
+                        <AvatarImage src={profile.avatar_url || ""} alt={profile.full_name} />
+                        <AvatarFallback className="text-2xl">
+                          {profile.full_name?.[0] || "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      {editing && (
+                        <Button
+                          size="icon"
+                          className="absolute bottom-0 right-0 rounded-full"
+                          variant="secondary"
+                        >
+                          <Camera className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <CardTitle className="text-2xl">{profile.full_name}</CardTitle>
+                    <div className="flex items-center justify-center gap-1 text-muted-foreground">
+                      <Calendar className="w-4 h-4" />
+                      <span>{profile.age} years old</span>
+                    </div>
+                    <div className="flex items-center justify-center gap-1 text-muted-foreground">
+                      <MapPin className="w-4 h-4" />
+                      <span>{profile.location}</span>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-sm font-medium">Bio</Label>
+                        {editing ? (
+                          <Textarea
+                            value={bio}
+                            onChange={(e) => setBio(e.target.value)}
+                            placeholder="Tell us about yourself..."
+                            className="mt-1"
+                            rows={4}
+                          />
+                        ) : (
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {profile.bio || "No bio provided"}
+                          </p>
+                        )}
+                      </div>
+                      
+                      <div>
+                        <Label className="text-sm font-medium">Interests</Label>
+                        {editing ? (
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            {INTERESTS.map((interest) => (
+                              <div key={interest} className="flex items-center space-x-2">
+                                <input
+                                  type="checkbox"
+                                  id={interest}
+                                  checked={interests.includes(interest)}
+                                  onChange={() => handleInterestToggle(interest)}
+                                  className="rounded"
+                                />
+                                <Label htmlFor={interest} className="text-sm">
+                                  {interest}
+                                </Label>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {profile.interests?.map((interest) => (
+                              <Badge key={interest} variant="secondary">
+                                {interest}
+                              </Badge>
+                            )) || <span className="text-sm text-muted-foreground">No interests selected</span>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Stats and Info */}
+                <div className="lg:col-span-2 space-y-6">
+                  {/* Basic Info */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Basic Information</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label>Full Name</Label>
+                          {editing ? (
+                            <Input
+                              value={fullName}
+                              onChange={(e) => setFullName(e.target.value)}
+                              className="mt-1"
+                            />
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">{profile.full_name}</p>
+                          )}
+                        </div>
+                        <div>
+                          <Label>Age</Label>
+                          {editing ? (
+                            <Input
+                              type="number"
+                              value={age}
+                              onChange={(e) => setAge(e.target.value)}
+                              className="mt-1"
+                              min="18"
+                              max="100"
+                            />
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">{profile.age}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Location</Label>
+                        {editing ? (
+                          <Input
+                            value={location}
+                            onChange={(e) => setLocation(e.target.value)}
+                            placeholder="City, State"
+                            className="mt-1"
+                          />
+                        ) : (
+                          <p className="text-sm text-muted-foreground mt-1">{profile.location}</p>
+                        )}
+                      </div>
+                      <div>
+                        <Label>Email</Label>
+                        <p className="text-sm text-muted-foreground mt-1">{profile.email}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Dating Preferences */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Dating Preferences</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label>Gender</Label>
+                          {editing ? (
+                            <Select value={gender} onValueChange={setGender}>
+                              <SelectTrigger className="mt-1">
+                                <SelectValue placeholder="Select your gender" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {GENDER_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {GENDER_OPTIONS.find(opt => opt.value === profile.gender)?.label || profile.gender}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <Label>Looking For</Label>
+                          {editing ? (
+                            <Select value={lookingFor} onValueChange={setLookingFor}>
+                              <SelectTrigger className="mt-1">
+                                <SelectValue placeholder="Who are you looking for?" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {LOOKING_FOR_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {LOOKING_FOR_OPTIONS.find(opt => opt.value === profile.looking_for)?.label || profile.looking_for}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Activity Stats */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Activity</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                          <div className="text-2xl font-bold text-primary">0</div>
+                          <div className="text-sm text-muted-foreground">Matches</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-secondary">0</div>
+                          <div className="text-sm text-muted-foreground">Messages</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-accent">0</div>
+                          <div className="text-sm text-muted-foreground">AI Chats</div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* Preferences Tab */}
+            <TabsContent value="preferences" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Dating Preferences */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Dating Preferences</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Set your preferences for potential matches
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div>
+                      <Label className="text-base">Age Range</Label>
+                      <p className="text-sm text-muted-foreground mb-3">Preferred age range for matches</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm">Min Age</Label>
+                          <Input
+                            type="number"
+                            placeholder="18"
+                            min="18"
+                            max="100"
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-sm">Max Age</Label>
+                          <Input
+                            type="number"
+                            placeholder="30"
+                            min="18"
+                            max="100"
+                            className="mt-1"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className="text-base">Distance</Label>
+                      <p className="text-sm text-muted-foreground mb-3">Maximum distance for matches</p>
+                      <Select>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select distance" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1 mile</SelectItem>
+                          <SelectItem value="5">5 miles</SelectItem>
+                          <SelectItem value="10">10 miles</SelectItem>
+                          <SelectItem value="25">25 miles</SelectItem>
+                          <SelectItem value="50">50 miles</SelectItem>
+                          <SelectItem value="100">100 miles</SelectItem>
+                          <SelectItem value="any">Any distance</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label className="text-base">Relationship Type</Label>
+                      <p className="text-sm text-muted-foreground mb-3">What are you looking for?</p>
+                      <Select>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select relationship type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="casual">Casual Dating</SelectItem>
+                          <SelectItem value="serious">Serious Relationship</SelectItem>
+                          <SelectItem value="friendship">Friendship</SelectItem>
+                          <SelectItem value="any">Open to anything</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label className="text-base">Interested In</Label>
+                      <p className="text-sm text-muted-foreground mb-3">Select all that apply</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {INTERESTS.map((interest) => (
+                          <div key={interest} className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id={`pref-${interest}`}
+                              className="rounded"
+                            />
+                            <Label htmlFor={`pref-${interest}`} className="text-sm">
+                              {interest}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Notification Preferences */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Notification Preferences</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Choose what notifications you want to receive
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base">New Matches</Label>
+                        <p className="text-sm text-muted-foreground">Get notified when someone likes you</p>
+                      </div>
+                      <Button variant="default" size="sm">
+                        On
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base">Messages</Label>
+                        <p className="text-sm text-muted-foreground">Get notified of new messages</p>
+                      </div>
+                      <Button variant="default" size="sm">
+                        On
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base">Profile Views</Label>
+                        <p className="text-sm text-muted-foreground">Get notified when someone views your profile</p>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        Off
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base">AI Practice Reminders</Label>
+                        <p className="text-sm text-muted-foreground">Reminders to practice with AI characters</p>
+                      </div>
+                      <Button variant="default" size="sm">
+                        On
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base">Weekly Summary</Label>
+                        <p className="text-sm text-muted-foreground">Weekly activity summary emails</p>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        Off
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* AI Practice Preferences */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>AI Practice Settings</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Customize your AI conversation experience
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div>
+                      <Label className="text-base">Preferred Character Types</Label>
+                      <p className="text-sm text-muted-foreground mb-3">What types of AI characters do you prefer?</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="flex items-center space-x-2">
+                          <input type="checkbox" id="romantic" className="rounded" />
+                          <Label htmlFor="romantic" className="text-sm">Romantic</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input type="checkbox" id="friendly" className="rounded" />
+                          <Label htmlFor="friendly" className="text-sm">Friendly</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input type="checkbox" id="flirty" className="rounded" />
+                          <Label htmlFor="flirty" className="text-sm">Flirty</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input type="checkbox" id="shy" className="rounded" />
+                          <Label htmlFor="shy" className="text-sm">Shy</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input type="checkbox" id="confident" className="rounded" />
+                          <Label htmlFor="confident" className="text-sm">Confident</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input type="checkbox" id="humorous" className="rounded" />
+                          <Label htmlFor="humorous" className="text-sm">Humorous</Label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className="text-base">Conversation Difficulty</Label>
+                      <p className="text-sm text-muted-foreground mb-3">Choose your preferred conversation level</p>
+                      <Select>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select difficulty" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="beginner">Beginner - Simple conversations</SelectItem>
+                          <SelectItem value="intermediate">Intermediate - Normal conversations</SelectItem>
+                          <SelectItem value="advanced">Advanced - Complex conversations</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base">Practice Mode</Label>
+                        <p className="text-sm text-muted-foreground">Enable practice mode for learning</p>
+                      </div>
+                      <Button variant="default" size="sm">
+                        On
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* App Preferences */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>App Preferences</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Customize your app experience
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div>
+                      <Label className="text-base">Theme</Label>
+                      <p className="text-sm text-muted-foreground mb-3">Choose your preferred theme</p>
+                      <Select>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select theme" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="light">Light Mode</SelectItem>
+                          <SelectItem value="dark">Dark Mode</SelectItem>
+                          <SelectItem value="auto">Auto (System)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base">Anime Filters</Label>
+                        <p className="text-sm text-muted-foreground">Enable anime-style profile filters</p>
+                      </div>
+                      <Button variant="default" size="sm">
+                        On
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base">Sound Effects</Label>
+                        <p className="text-sm text-muted-foreground">Play sounds for notifications</p>
+                      </div>
+                      <Button variant="default" size="sm">
+                        On
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base">Vibration</Label>
+                        <p className="text-sm text-muted-foreground">Vibrate for notifications</p>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        Off
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base">Location Services</Label>
+                        <p className="text-sm text-muted-foreground">Use location for nearby matches</p>
+                      </div>
+                      <Button variant="default" size="sm">
+                        On
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+          </Tabs>
+        </div>
+      </main>
+    </div>
+  );
+}
