@@ -9,14 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { 
-  Heart, 
-  X, 
-  Star, 
-  MapPin, 
+import {
+  Heart,
+  X,
+  Star,
+  MapPin,
   Calendar,
   ArrowLeft,
-  Users
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -62,50 +62,53 @@ export default function DiscoverPage() {
 
   const fetchProfiles = async () => {
     try {
-      console.log('🔍 Fetching profiles for user:', user?.id);
-      
+      console.log("🔍 Fetching profiles for user:", user?.id);
+
       // First get all profiles except current user
       const { data: allProfiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .neq('id', user?.id)
-        .order('created_at', { ascending: false });
+        .from("profiles")
+        .select("*")
+        .neq("id", user?.id)
+        .order("created_at", { ascending: false });
 
       if (profilesError) {
-        console.error('❌ Error fetching profiles:', profilesError);
+        console.error("❌ Error fetching profiles:", profilesError);
         setError(`Failed to load profiles: ${profilesError.message}`);
         return;
       }
 
-      console.log('📋 All profiles found:', allProfiles?.length || 0);
+      console.log("📋 All profiles found:", allProfiles?.length || 0);
 
       // Get existing matches to filter out already liked/rejected profiles
       const { data: existingMatches, error: matchesError } = await supabase
-        .from('matches')
-        .select('user2_id, status')
-        .eq('user1_id', user?.id);
+        .from("matches")
+        .select("user2_id, status")
+        .eq("user1_id", user?.id);
 
       if (matchesError) {
-        console.error('❌ Error fetching matches:', matchesError);
+        console.error("❌ Error fetching matches:", matchesError);
         // Don't return here - just log the error and show all profiles
       }
 
-      console.log('💔 Existing matches:', existingMatches?.length || 0);
+      console.log("💔 Existing matches:", existingMatches?.length || 0);
 
       // Filter out profiles that have already been interacted with
-      const excludedIds = existingMatches?.map(match => match.user2_id) || [];
-      const availableProfiles = allProfiles?.filter(profile => 
-        !excludedIds.includes(profile.id)
-      ) || [];
+      const excludedIds = existingMatches?.map((match) => match.user2_id) || [];
+      const availableProfiles =
+        allProfiles?.filter((profile) => !excludedIds.includes(profile.id)) ||
+        [];
 
-      console.log('✅ Available profiles after filtering:', availableProfiles?.length || 0);
-      console.log('🚫 Excluded profile IDs:', excludedIds);
+      console.log(
+        "✅ Available profiles after filtering:",
+        availableProfiles?.length || 0
+      );
+      console.log("🚫 Excluded profile IDs:", excludedIds);
 
       setProfiles(availableProfiles);
       setCurrentIndex(0); // Reset to first profile
     } catch (err) {
-      console.error('💥 Exception in fetchProfiles:', err);
-      setError('Failed to load profiles');
+      console.error("💥 Exception in fetchProfiles:", err);
+      setError("Failed to load profiles");
     } finally {
       setLoading(false);
     }
@@ -113,149 +116,149 @@ export default function DiscoverPage() {
 
   const handleLike = async (profileId: string) => {
     if (!user || !profileId) {
-      console.log('❌ Missing user or profileId:', { user: !!user, profileId });
+      console.log("❌ Missing user or profileId:", { user: !!user, profileId });
       return;
     }
 
-    console.log('❤️ Liking profile:', profileId, 'by user:', user.id);
+    console.log("❤️ Liking profile:", profileId, "by user:", user.id);
 
     try {
       // Insert a match record with status 'pending' (user liked)
       const { data: insertData, error: insertError } = await supabase
-        .from('matches')
+        .from("matches")
         .insert({
           user1_id: user.id,
           user2_id: profileId,
-          status: 'pending'
+          status: "pending",
         })
         .select();
 
       if (insertError) {
-        console.error('❌ Error creating match:', insertError);
+        console.error("❌ Error creating match:", insertError);
         // Still move to next profile even if there's an error
       } else {
-        console.log('✅ Match created successfully:', insertData);
+        console.log("✅ Match created successfully:", insertData);
       }
 
       // Check if the other user already liked us (mutual match)
       const { data: mutualMatch, error: mutualError } = await supabase
-        .from('matches')
-        .select('*')
-        .eq('user1_id', profileId)
-        .eq('user2_id', user.id)
-        .eq('status', 'pending')
+        .from("matches")
+        .select("*")
+        .eq("user1_id", profileId)
+        .eq("user2_id", user.id)
+        .eq("status", "pending")
         .single();
 
       if (!mutualError && mutualMatch) {
-        console.log('🎉 Mutual match found!');
+        console.log("🎉 Mutual match found!");
         // It's a match! Update the existing mutual match to 'accepted'
         await supabase
-          .from('matches')
-          .update({ status: 'accepted' })
-          .eq('id', mutualMatch.id);
+          .from("matches")
+          .update({ status: "accepted" })
+          .eq("id", mutualMatch.id);
 
         // Delete the duplicate match record we just created
         await supabase
-          .from('matches')
+          .from("matches")
           .delete()
-          .eq('user1_id', user.id)
-          .eq('user2_id', profileId)
-          .eq('status', 'pending');
+          .eq("user1_id", user.id)
+          .eq("user2_id", profileId)
+          .eq("status", "pending");
 
-        console.log('🎉 It\'s a match!');
+        console.log("🎉 It's a match!");
         soundManager.playMatch();
-        
+
         // Send email notification to the matched user
-        const matchedUser = profiles.find(p => p.id === profileId);
+        const matchedUser = profiles.find((p) => p.id === profileId);
         if (matchedUser) {
           emailService.sendNewMatchNotification(
             profileId,
-            user?.email || '',
+            user?.email || "",
             matchedUser.full_name,
-            user?.user_metadata?.full_name || user?.email || 'Someone'
+            user?.user_metadata?.full_name || user?.email || "Someone"
           );
         }
-        
+
         setMatchedUser(matchedUser || null);
         setMatchId(mutualMatch.id);
         setShowMatchModal(true);
       } else {
-        console.log('💔 No mutual match yet');
+        console.log("💔 No mutual match yet");
         soundManager.playLike();
       }
 
       removeCurrentProfile();
     } catch (err) {
-      console.error('💥 Exception in handleLike:', err);
+      console.error("💥 Exception in handleLike:", err);
       removeCurrentProfile();
     }
   };
 
   const handlePass = async (profileId: string) => {
     if (!user || !profileId) {
-      console.log('❌ Missing user or profileId:', { user: !!user, profileId });
+      console.log("❌ Missing user or profileId:", { user: !!user, profileId });
       return;
     }
 
-    console.log('❌ Passing profile:', profileId, 'by user:', user.id);
+    console.log("❌ Passing profile:", profileId, "by user:", user.id);
 
     try {
       // Insert a match record with status 'rejected' (user passed)
       const { data: insertData, error } = await supabase
-        .from('matches')
+        .from("matches")
         .insert({
           user1_id: user.id,
           user2_id: profileId,
-          status: 'rejected'
+          status: "rejected",
         })
         .select();
 
       if (error) {
-        console.error('❌ Error creating rejection:', error);
+        console.error("❌ Error creating rejection:", error);
       } else {
-        console.log('✅ Rejection created successfully:', insertData);
+        console.log("✅ Rejection created successfully:", insertData);
       }
 
       soundManager.playReject();
       removeCurrentProfile();
     } catch (err) {
-      console.error('💥 Exception in handlePass:', err);
+      console.error("💥 Exception in handlePass:", err);
       removeCurrentProfile();
     }
   };
 
   const removeCurrentProfile = () => {
-    console.log('🗑️ Removing current profile at index:', currentIndex);
-    console.log('📊 Current profiles count:', profiles.length);
-    
-    setProfiles(prev => {
+    console.log("🗑️ Removing current profile at index:", currentIndex);
+    console.log("📊 Current profiles count:", profiles.length);
+
+    setProfiles((prev) => {
       // Remove the current profile
       const newProfiles = prev.filter((_, index) => index !== currentIndex);
-      
-      console.log('📊 New profiles count after removal:', newProfiles.length);
-      
+
+      console.log("📊 New profiles count after removal:", newProfiles.length);
+
       // Calculate the new index
       let newIndex = currentIndex;
       if (newIndex >= newProfiles.length) {
         newIndex = Math.max(0, newProfiles.length - 1);
       }
-      
-      console.log('📍 New index will be:', newIndex);
-      
+
+      console.log("📍 New index will be:", newIndex);
+
       // Update the index separately
       setCurrentIndex(newIndex);
-      
+
       return newProfiles;
     });
   };
 
   const currentProfile = profiles[currentIndex];
 
-  console.log('🎯 Current state:', {
+  console.log("🎯 Current state:", {
     profilesCount: profiles.length,
     currentIndex,
     currentProfile: currentProfile?.full_name,
-    currentProfileId: currentProfile?.id
+    currentProfileId: currentProfile?.id,
   });
 
   if (loading) {
@@ -326,7 +329,8 @@ export default function DiscoverPage() {
             <Users className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
             <h1 className="text-2xl font-bold mb-4">No More Profiles</h1>
             <p className="text-muted-foreground mb-6">
-              You've seen all available profiles! Check back later for new people or refresh to see if there are any updates.
+              You've seen all available profiles! Check back later for new
+              people or refresh to see if there are any updates.
             </p>
             <div className="space-y-2">
               <Button onClick={fetchProfiles}>Refresh Profiles</Button>
@@ -384,13 +388,18 @@ export default function DiscoverPage() {
             <CardHeader className="text-center">
               <div className="relative mx-auto w-32 h-32 mb-4">
                 <Avatar className="w-full h-full">
-                  <AvatarImage src={currentProfile?.avatar_url || ""} alt={currentProfile?.full_name} />
+                  <AvatarImage
+                    src={currentProfile?.avatar_url || ""}
+                    alt={currentProfile?.full_name}
+                  />
                   <AvatarFallback className="text-2xl">
                     {currentProfile?.full_name?.[0] || "?"}
                   </AvatarFallback>
                 </Avatar>
               </div>
-              <CardTitle className="text-2xl">{currentProfile?.full_name}</CardTitle>
+              <CardTitle className="text-2xl">
+                {currentProfile?.full_name}
+              </CardTitle>
               <div className="flex items-center justify-center gap-4 text-muted-foreground">
                 <div className="flex items-center gap-1">
                   <Calendar className="w-4 h-4" />
@@ -410,7 +419,7 @@ export default function DiscoverPage() {
                     {currentProfile?.bio || "No bio provided"}
                   </p>
                 </div>
-                
+
                 <div>
                   <h4 className="font-medium mb-2">Interests</h4>
                   <div className="flex flex-wrap gap-2">
@@ -418,7 +427,11 @@ export default function DiscoverPage() {
                       <Badge key={interest} variant="secondary">
                         {interest}
                       </Badge>
-                    )) || <span className="text-sm text-muted-foreground">No interests listed</span>}
+                    )) || (
+                      <span className="text-sm text-muted-foreground">
+                        No interests listed
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -435,7 +448,7 @@ export default function DiscoverPage() {
             >
               <X className="w-6 h-6" />
             </Button>
-            
+
             <Button
               size="lg"
               onClick={() => handleLike(currentProfile?.id)}
@@ -443,7 +456,7 @@ export default function DiscoverPage() {
             >
               <Heart className="w-6 h-6" />
             </Button>
-            
+
             <Button
               variant="outline"
               size="lg"
@@ -457,7 +470,9 @@ export default function DiscoverPage() {
           {/* Progress */}
           <div className="text-center mt-4">
             <p className="text-sm text-muted-foreground">
-              {profiles.length > 0 ? `${currentIndex + 1} of ${profiles.length}` : 'No profiles remaining'}
+              {profiles.length > 0
+                ? `${currentIndex + 1} of ${profiles.length}`
+                : "No profiles remaining"}
             </p>
           </div>
         </div>
@@ -467,7 +482,9 @@ export default function DiscoverPage() {
       <Dialog open={showMatchModal} onOpenChange={setShowMatchModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-center text-2xl">🎉 It's a Match!</DialogTitle>
+            <DialogTitle className="text-center text-2xl">
+              🎉 It's a Match!
+            </DialogTitle>
             <DialogDescription className="text-center">
               You and {matchedUser?.full_name} liked each other!
             </DialogDescription>
@@ -475,30 +492,30 @@ export default function DiscoverPage() {
           <div className="flex flex-col items-center space-y-4 py-4">
             <div className="flex items-center space-x-4">
               <Avatar className="w-16 h-16">
-                <AvatarImage src={user?.user_metadata?.avatar_url || ""} alt="You" />
+                <AvatarImage
+                  src={user?.user_metadata?.avatar_url || ""}
+                  alt="You"
+                />
                 <AvatarFallback>You</AvatarFallback>
               </Avatar>
               <Heart className="w-8 h-8 text-red-500" />
               <Avatar className="w-16 h-16">
-                <AvatarImage src={matchedUser?.avatar_url || ""} alt={matchedUser?.full_name} />
-                <AvatarFallback>{matchedUser?.full_name?.[0] || "?"}</AvatarFallback>
+                <AvatarImage
+                  src={matchedUser?.avatar_url || ""}
+                  alt={matchedUser?.full_name}
+                />
+                <AvatarFallback>
+                  {matchedUser?.full_name?.[0] || "?"}
+                </AvatarFallback>
               </Avatar>
             </div>
             <div className="flex space-x-2 w-full">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="flex-1"
                 onClick={() => setShowMatchModal(false)}
               >
                 Keep Swiping
-              </Button>
-              <Button 
-                className="flex-1" 
-                asChild
-              >
-                <Link href={`/user-chat/${matchId}`}>
-                  Start Chatting
-                </Link>
               </Button>
             </div>
           </div>

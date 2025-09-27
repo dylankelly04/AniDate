@@ -90,6 +90,8 @@ interface ProfileData {
   looking_for: string;
   interests: string[];
   avatar_url: string | null;
+  original_avatar_url: string | null;
+  anime_avatar_url: string | null;
   created_at: string;
   updated_at: string;
   college: string | null;
@@ -116,6 +118,9 @@ export default function ProfilePage() {
   const [gender, setGender] = useState("");
   const [lookingFor, setLookingFor] = useState("");
   const [interests, setInterests] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [generatingAnime, setGeneratingAnime] = useState(false);
+  const [showOriginalImage, setShowOriginalImage] = useState(false);
 
   // Preferences state
   const [preferences, setPreferences] = useState({
@@ -125,18 +130,18 @@ export default function ProfilePage() {
     maxDistance: 25,
     relationshipType: "any",
     interestedIn: [] as string[],
-    
+
     // Notification preferences
     newMatches: true,
     messages: true,
     profileViews: false,
     aiPracticeReminders: true,
     weeklySummary: false,
-    
+
     // AI Practice preferences
     characterTypes: [] as string[],
     conversationDifficulty: "intermediate",
-    
+
     // App preferences
     theme: "system",
     soundEffects: true,
@@ -184,87 +189,87 @@ export default function ProfilePage() {
   const fetchPreferences = async () => {
     try {
       const { data, error } = await supabase
-        .from('user_preferences')
-        .select('preference_key, preference_value')
-        .eq('user_id', user?.id);
+        .from("user_preferences")
+        .select("preference_key, preference_value")
+        .eq("user_id", user?.id);
 
       if (error) {
-        console.error('Error fetching preferences:', error);
+        console.error("Error fetching preferences:", error);
         return;
       }
 
       // Convert preferences array to object
       const prefs: any = {};
-      data?.forEach(pref => {
+      data?.forEach((pref) => {
         const key = pref.preference_key;
         let value = pref.preference_value;
-        
+
         // Parse JSON values
-        if (value && (value.startsWith('[') || value.startsWith('{'))) {
+        if (value && (value.startsWith("[") || value.startsWith("{"))) {
           try {
             value = JSON.parse(value);
           } catch (e) {
             // Keep as string if parsing fails
           }
         }
-        
+
         // Convert string booleans to actual booleans
-        if (value === 'true') value = true;
-        if (value === 'false') value = false;
-        
+        if (value === "true") value = true;
+        if (value === "false") value = false;
+
         // Convert string numbers to actual numbers
-        if (typeof value === 'string' && !isNaN(Number(value))) {
+        if (typeof value === "string" && !isNaN(Number(value))) {
           value = Number(value);
         }
-        
+
         prefs[key] = value;
       });
 
-      setPreferences(prev => ({ ...prev, ...prefs }));
-      
+      setPreferences((prev) => ({ ...prev, ...prefs }));
+
       // Apply theme if it exists in preferences
       if (prefs.theme) {
         setTheme(prefs.theme);
       }
-      
+
       // Apply sound effects setting
-      if (typeof prefs.soundEffects === 'boolean') {
+      if (typeof prefs.soundEffects === "boolean") {
         soundManager.setEnabled(prefs.soundEffects);
       }
     } catch (err) {
-      console.error('Exception in fetchPreferences:', err);
+      console.error("Exception in fetchPreferences:", err);
     }
   };
 
   const savePreferences = async () => {
     try {
-      const preferencesArray = Object.entries(preferences).map(([key, value]) => ({
-        user_id: user?.id,
-        preference_key: key,
-        preference_value: typeof value === 'object' ? JSON.stringify(value) : String(value)
-      }));
+      const preferencesArray = Object.entries(preferences).map(
+        ([key, value]) => ({
+          user_id: user?.id,
+          preference_key: key,
+          preference_value:
+            typeof value === "object" ? JSON.stringify(value) : String(value),
+        })
+      );
 
       // Delete existing preferences first
-      await supabase
-        .from('user_preferences')
-        .delete()
-        .eq('user_id', user?.id);
+      await supabase.from("user_preferences").delete().eq("user_id", user?.id);
 
       // Insert new preferences
       const { error } = await supabase
-        .from('user_preferences')
+        .from("user_preferences")
         .insert(preferencesArray);
 
       if (error) {
-        console.error('Error saving preferences:', error);
-        setError('Failed to save preferences');
+        console.error("Error saving preferences:", error);
+        setError("Failed to save preferences");
         return;
       }
 
-      console.log('Preferences saved successfully');
+      console.log("Preferences saved successfully");
     } catch (err) {
-      console.error('Exception in savePreferences:', err);
-      setError('Failed to save preferences');
+      console.error("Exception in savePreferences:", err);
+      setError("Failed to save preferences");
     }
   };
 
@@ -362,6 +367,244 @@ export default function ProfilePage() {
     );
   };
 
+  const uploadBase64Image = async (
+    base64Data: string,
+    fileName: string
+  ): Promise<string> => {
+    try {
+      console.log("Uploading base64 image to Supabase storage...");
+
+      // Convert base64 to blob
+      const response = await fetch(base64Data);
+      const blob = await response.blob();
+      const file = new File([blob], fileName, { type: blob.type });
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from("user-avatars")
+        .upload(`anime/${fileName}`, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error("Base64 image upload error:", uploadError);
+        throw new Error(`Failed to upload anime image: ${uploadError.message}`);
+      }
+
+      console.log("Successfully uploaded base64 anime image");
+
+      // Get the public URL
+      const {
+        data: { publicUrl },
+      } = supabase.storage
+        .from("user-avatars")
+        .getPublicUrl(`anime/${fileName}`);
+
+      console.log("Anime image public URL:", publicUrl);
+      return publicUrl;
+    } catch (error) {
+      console.error("Error uploading base64 image:", error);
+      throw error;
+    }
+  };
+
+  const downloadAndUploadImage = async (
+    imageUrl: string,
+    fileName: string
+  ): Promise<string | null> => {
+    try {
+      console.log("Downloading anime image from:", imageUrl);
+
+      // Download the image
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        console.error(
+          "Failed to download image:",
+          response.status,
+          response.statusText
+        );
+        throw new Error(
+          `Failed to download image: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const blob = await response.blob();
+      console.log("Downloaded blob size:", blob.size, "type:", blob.type);
+
+      const file = new File([blob], fileName, { type: blob.type });
+
+      console.log("Uploading to Supabase storage...");
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from("user-avatars")
+        .upload(`anime/${fileName}`, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error("Anime image upload error:", uploadError);
+        console.error("Upload error details:", {
+          message: uploadError.message,
+          statusCode: uploadError.statusCode,
+          error: uploadError.error,
+        });
+        throw new Error(`Failed to upload anime image: ${uploadError.message}`);
+      }
+
+      console.log("Successfully uploaded anime image");
+
+      // Get the public URL
+      const {
+        data: { publicUrl },
+      } = supabase.storage
+        .from("user-avatars")
+        .getPublicUrl(`anime/${fileName}`);
+
+      console.log("Anime image public URL:", publicUrl);
+      return publicUrl;
+    } catch (error) {
+      console.error("Error downloading and uploading anime image:", error);
+      throw error; // Re-throw to be caught by the calling function
+    }
+  };
+
+  const handleImageUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      setError("Please select a valid image file");
+      return;
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image size must be less than 5MB");
+      return;
+    }
+
+    setUploading(true);
+    setError("");
+
+    try {
+      // Create a unique filename for original
+      const fileExt = file.name.split(".").pop();
+      const timestamp = Date.now();
+      const originalFileName = `${user.id}-original-${timestamp}.${fileExt}`;
+      const originalFilePath = `avatars/${originalFileName}`;
+
+      // Upload original image to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from("user-avatars")
+        .upload(originalFilePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error("Upload error:", uploadError);
+        console.error("Error details:", {
+          message: uploadError.message,
+          statusCode: uploadError.statusCode,
+          error: uploadError.error,
+        });
+        setError(`Failed to upload image: ${uploadError.message}`);
+        return;
+      }
+
+      // Get the public URL for original
+      const {
+        data: { publicUrl: originalUrl },
+      } = supabase.storage.from("user-avatars").getPublicUrl(originalFilePath);
+
+      // Generate anime version
+      setGeneratingAnime(true);
+
+      const animeResponse = await fetch("/api/generate-anime-image", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ imageUrl: originalUrl }),
+      });
+
+      if (!animeResponse.ok) {
+        const errorData = await animeResponse.json().catch(() => ({}));
+        console.error("Anime generation failed:", {
+          status: animeResponse.status,
+          statusText: animeResponse.statusText,
+          error: errorData,
+        });
+        throw new Error(
+          `Failed to generate anime version: ${
+            errorData.error || animeResponse.statusText
+          }`
+        );
+      }
+
+      const responseData = await animeResponse.json();
+      const { animeImageData, animeImageUrl } = responseData;
+
+      if (!animeImageData && !animeImageUrl) {
+        throw new Error("No anime image data returned");
+      }
+
+      let animeStorageUrl;
+
+      if (animeImageData) {
+        // Use base64 data directly
+        console.log("Using base64 image data");
+        animeStorageUrl = await uploadBase64Image(
+          animeImageData,
+          `${user.id}-anime-${timestamp}.png`
+        );
+      } else {
+        // Fallback to downloading from URL
+        console.log("Using URL fallback");
+        const animeFileName = `${user.id}-anime-${timestamp}.png`;
+        animeStorageUrl = await downloadAndUploadImage(
+          animeImageUrl,
+          animeFileName
+        );
+      }
+
+      // Update profile with both URLs
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({
+          avatar_url: animeStorageUrl, // Default display is anime version
+          original_avatar_url: originalUrl,
+          anime_avatar_url: animeStorageUrl,
+        })
+        .eq("id", user.id);
+
+      if (updateError) {
+        console.error("Update error:", updateError);
+        setError("Failed to update profile");
+        return;
+      }
+
+      // Refresh profile data
+      await fetchProfile();
+    } catch (err) {
+      console.error("Image upload error:", err);
+      setError(
+        `Failed to process image: ${
+          err instanceof Error ? err.message : "Unknown error"
+        }`
+      );
+    } finally {
+      setUploading(false);
+      setGeneratingAnime(false);
+    }
+  };
+
   if (!mounted || loading) {
     return (
       <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
@@ -454,6 +697,23 @@ export default function ProfilePage() {
             </Card>
           )}
 
+          {(uploading || generatingAnime) && (
+            <Card className="mb-6 border-blue-200 bg-blue-50">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-blue-600">
+                    {uploading
+                      ? "Uploading image..."
+                      : generatingAnime
+                      ? "Creating anime character..."
+                      : "Processing..."}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Aura Points Section - NEW */}
           <Card className="mb-6">
             <CardHeader>
@@ -532,7 +792,13 @@ export default function ProfilePage() {
                     <div className="relative mx-auto w-32 h-32 mb-4">
                       <Avatar className="w-full h-full">
                         <AvatarImage
-                          src={profile.avatar_url || ""}
+                          src={
+                            showOriginalImage && profile.original_avatar_url
+                              ? profile.original_avatar_url
+                              : profile.anime_avatar_url ||
+                                profile.avatar_url ||
+                                ""
+                          }
                           alt={profile.full_name}
                         />
                         <AvatarFallback className="text-2xl">
@@ -540,15 +806,67 @@ export default function ProfilePage() {
                         </AvatarFallback>
                       </Avatar>
                       {editing && (
-                        <Button
-                          size="icon"
-                          className="absolute bottom-0 right-0 rounded-full"
-                          variant="secondary"
-                        >
-                          <Camera className="w-4 h-4" />
-                        </Button>
+                        <>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleImageUpload}
+                            className="hidden"
+                            id="avatar-upload"
+                            disabled={uploading}
+                          />
+                          <Button
+                            size="icon"
+                            className="absolute bottom-0 right-0 rounded-full"
+                            variant="secondary"
+                            onClick={() =>
+                              document.getElementById("avatar-upload")?.click()
+                            }
+                            disabled={uploading || generatingAnime}
+                          >
+                            {uploading ? (
+                              <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                            ) : generatingAnime ? (
+                              <div className="w-4 h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <Camera className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </>
                       )}
                     </div>
+
+                    {/* Image Toggle Button */}
+                    {profile.original_avatar_url &&
+                      profile.anime_avatar_url && (
+                        <div className="mb-4 flex flex-col items-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setShowOriginalImage(!showOriginalImage)
+                            }
+                            className="flex items-center gap-2"
+                          >
+                            {showOriginalImage ? (
+                              <>
+                                <EyeOff className="w-4 h-4" />
+                                Show Anime Version
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="w-4 h-4" />
+                                Show Original
+                              </>
+                            )}
+                          </Button>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {showOriginalImage
+                              ? "Original photo"
+                              : "Anime version"}
+                          </p>
+                        </div>
+                      )}
                     <CardTitle className="text-2xl">
                       {profile.full_name}
                     </CardTitle>
@@ -716,7 +1034,9 @@ export default function ProfilePage() {
                       </div>
                       <div>
                         <Label>Email</Label>
-                        <p className="text-sm text-muted-foreground mt-1">{profile.email}</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {profile.email}
+                        </p>
                       </div>
                     </CardContent>
                   </Card>
@@ -852,7 +1172,12 @@ export default function ProfilePage() {
                             max="100"
                             className="mt-1"
                             value={preferences.ageRangeMin}
-                            onChange={(e) => setPreferences(prev => ({ ...prev, ageRangeMin: parseInt(e.target.value) || 18 }))}
+                            onChange={(e) =>
+                              setPreferences((prev) => ({
+                                ...prev,
+                                ageRangeMin: parseInt(e.target.value) || 18,
+                              }))
+                            }
                           />
                         </div>
                         <div>
@@ -864,7 +1189,12 @@ export default function ProfilePage() {
                             max="100"
                             className="mt-1"
                             value={preferences.ageRangeMax}
-                            onChange={(e) => setPreferences(prev => ({ ...prev, ageRangeMax: parseInt(e.target.value) || 30 }))}
+                            onChange={(e) =>
+                              setPreferences((prev) => ({
+                                ...prev,
+                                ageRangeMax: parseInt(e.target.value) || 30,
+                              }))
+                            }
                           />
                         </div>
                       </div>
@@ -872,7 +1202,9 @@ export default function ProfilePage() {
 
                     <div>
                       <Label className="text-base">Distance</Label>
-                      <p className="text-sm text-muted-foreground mb-3">Maximum distance for matches</p>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Maximum distance for matches
+                      </p>
                       <Select>
                         <SelectTrigger>
                           <SelectValue placeholder="Select distance" />
@@ -891,7 +1223,9 @@ export default function ProfilePage() {
 
                     <div>
                       <Label className="text-base">Relationship Type</Label>
-                      <p className="text-sm text-muted-foreground mb-3">What are you looking for?</p>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        What are you looking for?
+                      </p>
                       <Select>
                         <SelectTrigger>
                           <SelectValue placeholder="Select relationship type" />
@@ -914,16 +1248,32 @@ export default function ProfilePage() {
                       </p>
                       <div className="grid grid-cols-2 gap-2">
                         {INTERESTS.map((interest) => (
-                          <div key={interest} className="flex items-center space-x-2">
+                          <div
+                            key={interest}
+                            className="flex items-center space-x-2"
+                          >
                             <input
                               type="checkbox"
                               id={`pref-${interest}`}
-                              checked={preferences.interestedIn.includes(interest)}
+                              checked={preferences.interestedIn.includes(
+                                interest
+                              )}
                               onCheckedChange={(checked) => {
                                 if (checked) {
-                                  setPreferences(prev => ({ ...prev, interestedIn: [...prev.interestedIn, interest] }));
+                                  setPreferences((prev) => ({
+                                    ...prev,
+                                    interestedIn: [
+                                      ...prev.interestedIn,
+                                      interest,
+                                    ],
+                                  }));
                                 } else {
-                                  setPreferences(prev => ({ ...prev, interestedIn: prev.interestedIn.filter(i => i !== interest) }));
+                                  setPreferences((prev) => ({
+                                    ...prev,
+                                    interestedIn: prev.interestedIn.filter(
+                                      (i) => i !== interest
+                                    ),
+                                  }));
                                 }
                               }}
                             />
@@ -956,10 +1306,15 @@ export default function ProfilePage() {
                           Get notified when someone likes you
                         </p>
                       </div>
-                      <Button 
-                        variant={preferences.newMatches ? "default" : "outline"} 
+                      <Button
+                        variant={preferences.newMatches ? "default" : "outline"}
                         size="sm"
-                        onClick={() => setPreferences(prev => ({ ...prev, newMatches: !prev.newMatches }))}
+                        onClick={() =>
+                          setPreferences((prev) => ({
+                            ...prev,
+                            newMatches: !prev.newMatches,
+                          }))
+                        }
                       >
                         {preferences.newMatches ? "On" : "Off"}
                       </Button>
@@ -972,10 +1327,15 @@ export default function ProfilePage() {
                           Get notified of new messages
                         </p>
                       </div>
-                      <Button 
-                        variant={preferences.messages ? "default" : "outline"} 
+                      <Button
+                        variant={preferences.messages ? "default" : "outline"}
                         size="sm"
-                        onClick={() => setPreferences(prev => ({ ...prev, messages: !prev.messages }))}
+                        onClick={() =>
+                          setPreferences((prev) => ({
+                            ...prev,
+                            messages: !prev.messages,
+                          }))
+                        }
                       >
                         {preferences.messages ? "On" : "Off"}
                       </Button>
@@ -988,10 +1348,17 @@ export default function ProfilePage() {
                           Get notified when someone views your profile
                         </p>
                       </div>
-                      <Button 
-                        variant={preferences.profileViews ? "default" : "outline"} 
+                      <Button
+                        variant={
+                          preferences.profileViews ? "default" : "outline"
+                        }
                         size="sm"
-                        onClick={() => setPreferences(prev => ({ ...prev, profileViews: !prev.profileViews }))}
+                        onClick={() =>
+                          setPreferences((prev) => ({
+                            ...prev,
+                            profileViews: !prev.profileViews,
+                          }))
+                        }
                       >
                         {preferences.profileViews ? "On" : "Off"}
                       </Button>
@@ -1006,10 +1373,19 @@ export default function ProfilePage() {
                           Reminders to practice with AI characters
                         </p>
                       </div>
-                      <Button 
-                        variant={preferences.aiPracticeReminders ? "default" : "outline"} 
+                      <Button
+                        variant={
+                          preferences.aiPracticeReminders
+                            ? "default"
+                            : "outline"
+                        }
                         size="sm"
-                        onClick={() => setPreferences(prev => ({ ...prev, aiPracticeReminders: !prev.aiPracticeReminders }))}
+                        onClick={() =>
+                          setPreferences((prev) => ({
+                            ...prev,
+                            aiPracticeReminders: !prev.aiPracticeReminders,
+                          }))
+                        }
                       >
                         {preferences.aiPracticeReminders ? "On" : "Off"}
                       </Button>
@@ -1022,10 +1398,17 @@ export default function ProfilePage() {
                           Weekly activity summary emails
                         </p>
                       </div>
-                      <Button 
-                        variant={preferences.weeklySummary ? "default" : "outline"} 
+                      <Button
+                        variant={
+                          preferences.weeklySummary ? "default" : "outline"
+                        }
                         size="sm"
-                        onClick={() => setPreferences(prev => ({ ...prev, weeklySummary: !prev.weeklySummary }))}
+                        onClick={() =>
+                          setPreferences((prev) => ({
+                            ...prev,
+                            weeklySummary: !prev.weeklySummary,
+                          }))
+                        }
                       >
                         {preferences.weeklySummary ? "On" : "Off"}
                       </Button>
@@ -1137,7 +1520,9 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Practice Mode</Label>
-                        <p className="text-sm text-muted-foreground">Enable practice mode for learning</p>
+                        <p className="text-sm text-muted-foreground">
+                          Enable practice mode for learning
+                        </p>
                       </div>
                       <Button variant="default" size="sm">
                         On
@@ -1157,7 +1542,9 @@ export default function ProfilePage() {
                   <CardContent className="space-y-6">
                     <div>
                       <Label className="text-base">Theme</Label>
-                      <p className="text-sm text-muted-foreground mb-3">Choose your preferred theme</p>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Choose your preferred theme
+                      </p>
                       <Select>
                         <SelectTrigger>
                           <SelectValue placeholder="Select theme" />
@@ -1173,7 +1560,9 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Anime Filters</Label>
-                        <p className="text-sm text-muted-foreground">Enable anime-style profile filters</p>
+                        <p className="text-sm text-muted-foreground">
+                          Enable anime-style profile filters
+                        </p>
                       </div>
                       <Button variant="default" size="sm">
                         On
@@ -1183,14 +1572,21 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Sound Effects</Label>
-                        <p className="text-sm text-muted-foreground">Play sounds for notifications</p>
+                        <p className="text-sm text-muted-foreground">
+                          Play sounds for notifications
+                        </p>
                       </div>
-                      <Button 
-                        variant={preferences.soundEffects ? "default" : "outline"} 
+                      <Button
+                        variant={
+                          preferences.soundEffects ? "default" : "outline"
+                        }
                         size="sm"
                         onClick={() => {
                           const newValue = !preferences.soundEffects;
-                          setPreferences(prev => ({ ...prev, soundEffects: newValue }));
+                          setPreferences((prev) => ({
+                            ...prev,
+                            soundEffects: newValue,
+                          }));
                           soundManager.setEnabled(newValue);
                         }}
                       >
@@ -1201,7 +1597,9 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Vibration</Label>
-                        <p className="text-sm text-muted-foreground">Vibrate for notifications</p>
+                        <p className="text-sm text-muted-foreground">
+                          Vibrate for notifications
+                        </p>
                       </div>
                       <Button variant="outline" size="sm">
                         Off
@@ -1211,7 +1609,9 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Location Services</Label>
-                        <p className="text-sm text-muted-foreground">Use location for nearby matches</p>
+                        <p className="text-sm text-muted-foreground">
+                          Use location for nearby matches
+                        </p>
                       </div>
                       <Button variant="default" size="sm">
                         On

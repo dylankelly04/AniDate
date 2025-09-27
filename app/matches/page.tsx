@@ -52,12 +52,13 @@ export default function MatchesPage() {
   const fetchMatches = async () => {
     setLoading(true);
     setError("");
-    
+
     try {
       // Get matches where the current user is involved and status is 'accepted'
       const { data, error } = await supabase
-        .from('matches')
-        .select(`
+        .from("matches")
+        .select(
+          `
           *,
           user1_profile:profiles!matches_user1_id_fkey(
             id,
@@ -77,38 +78,42 @@ export default function MatchesPage() {
             avatar_url,
             interests
           )
-        `)
+        `
+        )
         .or(`user1_id.eq.${user?.id},user2_id.eq.${user?.id}`)
-        .eq('status', 'accepted')
-        .order('created_at', { ascending: false });
+        .eq("status", "accepted")
+        .order("created_at", { ascending: false });
 
       if (error) {
-        console.error('Error fetching matches:', error);
+        console.error("Error fetching matches:", error);
         setError(`Failed to load matches: ${error.message}`);
         return;
       }
 
       // Deduplicate matches and get the other user's profile
       const uniqueMatches = new Map();
-      
-      data?.forEach(match => {
-        const otherUserId = match.user1_id === user?.id ? match.user2_id : match.user1_id;
-        const otherUserProfile = match.user1_id === user?.id ? match.user2_profile : match.user1_profile;
-        
+
+      data?.forEach((match) => {
+        const otherUserId =
+          match.user1_id === user?.id ? match.user2_id : match.user1_id;
+        const otherUserProfile =
+          match.user1_id === user?.id
+            ? match.user2_profile
+            : match.user1_profile;
+
         // Only add if we haven't seen this user before
         if (!uniqueMatches.has(otherUserId)) {
           uniqueMatches.set(otherUserId, {
             ...match,
-            matched_user: otherUserProfile
+            matched_user: otherUserProfile,
           });
         }
       });
 
       setMatches(Array.from(uniqueMatches.values()));
-
     } catch (err) {
-      console.error('Exception in fetchMatches:', err);
-      setError('Failed to load matches');
+      console.error("Exception in fetchMatches:", err);
+      setError("Failed to load matches");
     } finally {
       setLoading(false);
     }
@@ -182,7 +187,8 @@ export default function MatchesPage() {
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold mb-2">Your Matches</h1>
             <p className="text-muted-foreground">
-              {matches.length} {matches.length === 1 ? 'match' : 'matches'} found
+              {matches.length} {matches.length === 1 ? "match" : "matches"}{" "}
+              found
             </p>
           </div>
 
@@ -205,20 +211,25 @@ export default function MatchesPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {matches.map((match) => (
-                <Card key={match.id} className="hover:shadow-lg transition-all duration-200">
+                <Card
+                  key={match.id}
+                  className="hover:shadow-lg transition-all duration-200"
+                >
                   <CardHeader className="text-center">
                     <div className="relative mx-auto w-20 h-20 mb-4">
                       <Avatar className="w-full h-full">
-                        <AvatarImage 
-                          src={match.matched_user?.avatar_url || ""} 
-                          alt={match.matched_user?.full_name} 
+                        <AvatarImage
+                          src={match.matched_user?.avatar_url || ""}
+                          alt={match.matched_user?.full_name}
                         />
                         <AvatarFallback className="text-lg">
                           {match.matched_user?.full_name?.[0] || "?"}
                         </AvatarFallback>
                       </Avatar>
                     </div>
-                    <CardTitle className="text-lg">{match.matched_user?.full_name}</CardTitle>
+                    <CardTitle className="text-lg">
+                      {match.matched_user?.full_name}
+                    </CardTitle>
                     <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
@@ -237,29 +248,27 @@ export default function MatchesPage() {
                           {match.matched_user?.bio || "No bio provided"}
                         </p>
                       </div>
-                      
+
                       <div>
                         <div className="flex flex-wrap gap-1">
-                          {match.matched_user?.interests?.slice(0, 3).map((interest) => (
-                            <Badge key={interest} variant="secondary" className="text-xs">
-                              {interest}
-                            </Badge>
-                          ))}
-                          {match.matched_user?.interests && match.matched_user.interests.length > 3 && (
-                            <Badge variant="secondary" className="text-xs">
-                              +{match.matched_user.interests.length - 3}
-                            </Badge>
-                          )}
+                          {match.matched_user?.interests
+                            ?.slice(0, 3)
+                            .map((interest) => (
+                              <Badge
+                                key={interest}
+                                variant="secondary"
+                                className="text-xs"
+                              >
+                                {interest}
+                              </Badge>
+                            ))}
+                          {match.matched_user?.interests &&
+                            match.matched_user.interests.length > 3 && (
+                              <Badge variant="secondary" className="text-xs">
+                                +{match.matched_user.interests.length - 3}
+                              </Badge>
+                            )}
                         </div>
-                      </div>
-
-                      <div className="pt-2">
-                        <Button className="w-full" asChild>
-                          <Link href={`/user-chat/${match.id}`}>
-                            <MessageCircle className="w-4 h-4 mr-2" />
-                            Start Chatting
-                          </Link>
-                        </Button>
                       </div>
                     </div>
                   </CardContent>
