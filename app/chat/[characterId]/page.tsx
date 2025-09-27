@@ -18,6 +18,10 @@ import {
   type AIMessage,
 } from "@/lib/ai-conversation-service-v2";
 import { StarRating, CONNECTION_LEVELS } from "@/components/ui/star-rating";
+import {
+  generateCharacterResponse,
+  convertMessagesToOpenAIFormat,
+} from "@/lib/openai-service";
 
 interface AnimeCharacter {
   id: string;
@@ -241,9 +245,30 @@ export default function ChatPage() {
         }
       }
 
-      // For now, we'll simulate an AI response
-      // In a real implementation, you'd call an AI API like OpenAI
-      const response = await simulateAIResponse(newMessage, character);
+      // Generate AI response using OpenAI
+      const conversationHistory = convertMessagesToOpenAIFormat(messages);
+      const aiResponse = await generateCharacterResponse(
+        character.chat_prompt,
+        conversationHistory,
+        newMessage
+      );
+
+      let response: string;
+      if (aiResponse.success && aiResponse.message) {
+        response = aiResponse.message;
+      } else {
+        // Fallback to simulated response if OpenAI fails
+        console.warn(
+          "OpenAI failed, using fallback response:",
+          aiResponse.error
+        );
+        response = await simulateAIResponse(newMessage, character);
+
+        // Show error toast to user
+        toast.error(
+          `AI response failed: ${aiResponse.error || "Unknown error"}`
+        );
+      }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
