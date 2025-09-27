@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { createClient } from "@/lib/supabase/client";
+import { soundManager } from "@/lib/sounds";
+import { emailService } from "@/lib/email-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +20,13 @@ import {
   Users
 } from "lucide-react";
 import Link from "next/link";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Profile {
   id: string;
@@ -40,6 +49,9 @@ export default function DiscoverPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showMatchModal, setShowMatchModal] = useState(false);
+  const [matchedUser, setMatchedUser] = useState<Profile | null>(null);
+  const [matchId, setMatchId] = useState<string | null>(null);
 
   const supabase = createClient();
 
@@ -150,9 +162,25 @@ export default function DiscoverPage() {
           .eq('user2_id', profileId);
 
         console.log('🎉 It\'s a match!');
-        // TODO: Show match modal/notification
+        soundManager.playMatch();
+        
+        // Send email notification to the matched user
+        const matchedUser = profiles.find(p => p.id === profileId);
+        if (matchedUser) {
+          emailService.sendNewMatchNotification(
+            profileId,
+            user?.email || '',
+            matchedUser.full_name,
+            user?.user_metadata?.full_name || user?.email || 'Someone'
+          );
+        }
+        
+        setMatchedUser(matchedUser || null);
+        setMatchId(mutualMatch.id);
+        setShowMatchModal(true);
       } else {
         console.log('💔 No mutual match yet');
+        soundManager.playLike();
       }
 
       removeCurrentProfile();
@@ -187,6 +215,7 @@ export default function DiscoverPage() {
         console.log('✅ Rejection created successfully:', insertData);
       }
 
+      soundManager.playReject();
       removeCurrentProfile();
     } catch (err) {
       console.error('💥 Exception in handlePass:', err);
@@ -274,12 +303,26 @@ export default function DiscoverPage() {
               </div>
               <span className="text-xl font-bold text-foreground">AniDate</span>
             </Link>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/homescreen">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Home
-              </Link>
-            </Button>
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/matches">
+                  <Users className="w-4 h-4 mr-2" />
+                  Matches
+                </Link>
+              </Button>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/chat">
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  AI Chat
+                </Link>
+              </Button>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/homescreen">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Back to Home
+                </Link>
+              </Button>
+            </div>
           </div>
         </header>
 
@@ -323,9 +366,15 @@ export default function DiscoverPage() {
           </Link>
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" asChild>
+              <Link href="/matches">
+                <Users className="w-4 h-4 mr-2" />
+                Matches
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
               <Link href="/chat">
                 <MessageCircle className="w-4 h-4 mr-2" />
-                Chat
+                AI Chat
               </Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>
@@ -424,6 +473,48 @@ export default function DiscoverPage() {
           </div>
         </div>
       </main>
+
+      {/* Match Modal */}
+      <Dialog open={showMatchModal} onOpenChange={setShowMatchModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-center text-2xl">🎉 It's a Match!</DialogTitle>
+            <DialogDescription className="text-center">
+              You and {matchedUser?.full_name} liked each other!
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center space-y-4 py-4">
+            <div className="flex items-center space-x-4">
+              <Avatar className="w-16 h-16">
+                <AvatarImage src={user?.user_metadata?.avatar_url || ""} alt="You" />
+                <AvatarFallback>You</AvatarFallback>
+              </Avatar>
+              <Heart className="w-8 h-8 text-red-500" />
+              <Avatar className="w-16 h-16">
+                <AvatarImage src={matchedUser?.avatar_url || ""} alt={matchedUser?.full_name} />
+                <AvatarFallback>{matchedUser?.full_name?.[0] || "?"}</AvatarFallback>
+              </Avatar>
+            </div>
+            <div className="flex space-x-2 w-full">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => setShowMatchModal(false)}
+              >
+                Keep Swiping
+              </Button>
+              <Button 
+                className="flex-1" 
+                asChild
+              >
+                <Link href={`/user-chat/${matchId}`}>
+                  Start Chatting
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
