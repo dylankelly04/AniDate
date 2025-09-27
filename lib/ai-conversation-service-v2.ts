@@ -43,7 +43,7 @@ export async function getOrCreateConversation(
       return { success: true, conversationId: existingConv.id };
     }
 
-    // If no conversation exists, create a new one
+    // If no conversation exists (PGRST116 = no rows found), create a new one
     if (fetchError && fetchError.code === "PGRST116") {
       console.log("No existing conversation found, creating new one");
       const { data: newConv, error: insertError } = await supabase
@@ -59,6 +59,23 @@ export async function getOrCreateConversation(
         .single();
 
       if (insertError) {
+        // If we get a duplicate key error, it means the conversation was created between our check and insert
+        if (insertError.code === "23505") {
+          console.log(
+            "Conversation already exists (race condition), fetching it"
+          );
+          // Try to fetch the existing conversation again
+          const { data: existingConv2, error: fetchError2 } = await supabase
+            .from("ai_conversations")
+            .select("id")
+            .eq("user_id", userId)
+            .eq("character_id", characterId)
+            .single();
+
+          if (existingConv2) {
+            return { success: true, conversationId: existingConv2.id };
+          }
+        }
         console.error("Error creating conversation:", insertError);
         return { success: false, error: insertError.message };
       }
@@ -67,9 +84,43 @@ export async function getOrCreateConversation(
       return { success: true, conversationId: newConv.id };
     }
 
-    // If there was a different error
-    console.error("Error fetching conversation:", fetchError);
-    return { success: false, error: fetchError.message };
+    // If there was a different error fetching, log it but don't fail
+    console.warn("Unexpected error fetching conversation:", fetchError);
+
+    // Try to create anyway, in case it's a temporary issue
+    console.log("Attempting to create conversation despite fetch error");
+    const { data: newConv, error: insertError } = await supabase
+      .from("ai_conversations")
+      .insert({
+        user_id: userId,
+        character_id: characterId,
+        character_name: characterName,
+        character_series: characterSeries,
+        messages: [],
+      })
+      .select("id")
+      .single();
+
+    if (insertError) {
+      if (insertError.code === "23505") {
+        console.log("Conversation already exists, fetching it");
+        const { data: existingConv2, error: fetchError2 } = await supabase
+          .from("ai_conversations")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("character_id", characterId)
+          .single();
+
+        if (existingConv2) {
+          return { success: true, conversationId: existingConv2.id };
+        }
+      }
+      console.error("Error creating conversation:", insertError);
+      return { success: false, error: insertError.message };
+    }
+
+    console.log("Created new conversation:", newConv.id);
+    return { success: true, conversationId: newConv.id };
   } catch (error) {
     console.error("Error in getOrCreateConversation:", error);
     return {
