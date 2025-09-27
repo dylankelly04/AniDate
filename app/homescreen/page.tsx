@@ -138,7 +138,7 @@ export default function HomescreenPage() {
           </div>
 
           {/* Main Action Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+          <div className="relative grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
             {/* AI Practice Card */}
             <div className="bg-background/80 backdrop-blur-sm border border-border/50 rounded-xl p-8 hover:shadow-lg transition-all duration-200">
               <div className="flex items-center gap-4 mb-6">
@@ -191,6 +191,15 @@ export default function HomescreenPage() {
                   <Users className="w-4 h-4 ml-2" />
                 </Link>
               </Button>
+            </div>
+
+            {/* Ani2 - AI Assistant mascot */}
+            <div className="absolute -top-40 right-0 hidden lg:block">
+              <img
+                src="/ani2.png"
+                alt="Ani - AI Assistant"
+                className="w-40 h-40 object-contain opacity-80"
+              />
             </div>
           </div>
 

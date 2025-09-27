@@ -120,26 +120,38 @@ export default function HomePage() {
             confidence, make connections.
           </p>
 
-          {/* CTA Button */}
-          {user ? (
-            <Button
-              size="lg"
-              className="text-lg px-8 py-6 h-auto bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200 mb-16"
-            >
-              Start Dating Practice
-              <Heart className="w-5 h-5 ml-2" />
-            </Button>
-          ) : (
-            <Link href="/signup">
+          {/* CTA Button Section */}
+          <div className="relative flex flex-col items-center mb-16">
+            {/* Ani2 - AI Assistant mascot */}
+            <div className="hidden lg:block mb-4">
+              <img
+                src="/ani2.png"
+                alt="Ani - AI Assistant"
+                className="w-48 h-48 object-contain opacity-80"
+              />
+            </div>
+
+            {/* CTA Button */}
+            {user ? (
               <Button
                 size="lg"
-                className="text-lg px-8 py-6 h-auto bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200 mb-16"
+                className="text-lg px-8 py-6 h-auto bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200 -mt-4"
               >
-                Get Started
+                Start Dating Practice
                 <Heart className="w-5 h-5 ml-2" />
               </Button>
-            </Link>
-          )}
+            ) : (
+              <Link href="/signup">
+                <Button
+                  size="lg"
+                  className="text-lg px-8 py-6 h-auto bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200 -mt-4"
+                >
+                  Get Started
+                  <Heart className="w-5 h-5 ml-2" />
+                </Button>
+              </Link>
+            )}
+          </div>
 
           {/* Features */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-16">
