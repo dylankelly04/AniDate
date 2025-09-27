@@ -128,10 +128,8 @@ export default function UserChatPage() {
   useEffect(() => {
     console.log(`Messages array changed. Length: ${messages.length}`);
     if (messages.length > 0 && user && matchId) {
-      // Calculate points based on current message count
-      const currentPoints = messages.length * 5;
-      console.log(`Updating points: ${messages.length} messages × 5 = ${currentPoints} points`);
-      setConversationPoints(currentPoints);
+      // Use the conversation points service to calculate points properly (1 pt sent, 2 pts received)
+      fetchConversationPoints();
     } else if (messages.length === 0) {
       setConversationPoints(0);
     }
@@ -144,6 +142,17 @@ export default function UserChatPage() {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const fetchConversationPoints = async () => {
+    if (!user || !matchId) return;
+    
+    try {
+      const points = await conversationPointsService.getConversationPoints(matchId, user.id);
+      setConversationPoints(points);
+    } catch (error) {
+      console.error('Error fetching conversation points:', error);
+    }
   };
 
   // Initial scroll to bottom when messages first load
@@ -194,25 +203,13 @@ export default function UserChatPage() {
       
       // Update points immediately when new messages are received
       if (messagesData && messagesData.length > 0) {
-        const newPoints = messagesData.length * 5;
-        console.log(`Updating points after receiving messages: ${messagesData.length} × 5 = ${newPoints}`);
-        setConversationPoints(newPoints);
+        // Recalculate points with new system (1 pt sent, 2 pts received)
+        setTimeout(async () => {
+          await fetchConversationPoints();
+        }, 100);
       }
     } catch (err) {
       console.error("Error checking for new messages:", err);
-    }
-  };
-
-  const fetchConversationPoints = async () => {
-    if (!user || !matchId) return;
-    
-    try {
-      console.log(`Fetching conversation points for match ${matchId}...`);
-      const points = await conversationPointsService.getConversationPoints(matchId, user.id);
-      console.log(`Fetched ${points} conversation points`);
-      setConversationPoints(points);
-    } catch (err) {
-      console.error("Error fetching conversation points:", err);
     }
   };
 
@@ -353,16 +350,17 @@ export default function UserChatPage() {
       setMessages((prev) => {
         const newMessages = [...prev, data];
         console.log(`After adding message: ${newMessages.length} messages`);
-        
-        // Update points immediately
-        const newPoints = newMessages.length * 5;
-        console.log(`Updating points immediately: ${newMessages.length} × 5 = ${newPoints}`);
-        console.log(`Current conversationPoints state before update: ${conversationPoints}`);
-        setConversationPoints(newPoints);
-        console.log(`setConversationPoints called with: ${newPoints}`);
-        
         return newMessages;
       });
+
+      // Update points immediately after state update
+      // Recalculate points with new system (1 pt sent, 2 pts received)
+      console.log(`Updating points immediately after sending message`);
+      console.log(`Current conversationPoints state before update: ${conversationPoints}`);
+      setTimeout(async () => {
+        await fetchConversationPoints();
+        console.log(`Points recalculated after sending message`);
+      }, 100);
       setNewMessage("");
       
       // Refocus the input and scroll to bottom after sending message

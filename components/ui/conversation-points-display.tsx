@@ -174,8 +174,8 @@ export function ConversationPointsDisplay({
                 How to Earn Points
               </h4>
               <ul className="text-xs text-muted-foreground space-y-1">
-                <li>• Send a message: +5 points</li>
-                <li>• Receive a reply: +5 points</li>
+                <li>• Send a message: +1 point</li>
+                <li>• Receive a reply: +2 points</li>
                 <li>• Keep the conversation going!</li>
               </ul>
             </div>

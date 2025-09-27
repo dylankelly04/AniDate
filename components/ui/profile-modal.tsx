@@ -138,75 +138,7 @@ export function ProfileModal({ isOpen, onClose, user, conversationPoints }: Prof
             </Card>
           )}
 
-          {/* Location */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg flex items-center gap-2">
-                {isFieldUnlocked('location') ? (
-                  <Unlock className="w-4 h-4 text-green-500" />
-                ) : (
-                  <Lock className="w-4 h-4 text-gray-400" />
-                )}
-                Location
-                {!isFieldUnlocked('location') && (
-                  <Badge variant="outline" className="text-xs">
-                    Unlock at Level 3 (50 pts)
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isFieldUnlocked('location') ? (
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-muted-foreground" />
-                  <span>{user.location || 'Location not specified'}</span>
-                </div>
-              ) : (
-                <div className="bg-gray-100 dark:bg-gray-800 rounded p-3 text-center">
-                  <Lock className="w-6 h-6 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Keep chatting to unlock location!
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Education */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg flex items-center gap-2">
-                {isFieldUnlocked('college') ? (
-                  <Unlock className="w-4 h-4 text-green-500" />
-                ) : (
-                  <Lock className="w-4 h-4 text-gray-400" />
-                )}
-                Education
-                {!isFieldUnlocked('college') && (
-                  <Badge variant="outline" className="text-xs">
-                    Unlock at Level 3 (50 pts)
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isFieldUnlocked('college') ? (
-                <div className="flex items-center gap-2">
-                  <GraduationCap className="w-4 h-4 text-muted-foreground" />
-                  <span>{user.college || 'Education not specified'}</span>
-                </div>
-              ) : (
-                <div className="bg-gray-100 dark:bg-gray-800 rounded p-3 text-center">
-                  <Lock className="w-6 h-6 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Keep chatting to unlock education!
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Interests */}
+          {/* Interests - Level 2 (25 pts) */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center gap-2">
@@ -247,7 +179,75 @@ export function ProfileModal({ isOpen, onClose, user, conversationPoints }: Prof
             </CardContent>
           </Card>
 
-          {/* Social Media */}
+          {/* Location - Level 3 (50 pts) */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center gap-2">
+                {isFieldUnlocked('location') ? (
+                  <Unlock className="w-4 h-4 text-green-500" />
+                ) : (
+                  <Lock className="w-4 h-4 text-gray-400" />
+                )}
+                Location
+                {!isFieldUnlocked('location') && (
+                  <Badge variant="outline" className="text-xs">
+                    Unlock at Level 3 (50 pts)
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isFieldUnlocked('location') ? (
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-muted-foreground" />
+                  <span>{user.location || 'Location not specified'}</span>
+                </div>
+              ) : (
+                <div className="bg-gray-100 dark:bg-gray-800 rounded p-3 text-center">
+                  <Lock className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Keep chatting to unlock location!
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Education - Level 3 (50 pts) */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center gap-2">
+                {isFieldUnlocked('college') ? (
+                  <Unlock className="w-4 h-4 text-green-500" />
+                ) : (
+                  <Lock className="w-4 h-4 text-gray-400" />
+                )}
+                Education
+                {!isFieldUnlocked('college') && (
+                  <Badge variant="outline" className="text-xs">
+                    Unlock at Level 3 (50 pts)
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isFieldUnlocked('college') ? (
+                <div className="flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4 text-muted-foreground" />
+                  <span>{user.college || 'Education not specified'}</span>
+                </div>
+              ) : (
+                <div className="bg-gray-100 dark:bg-gray-800 rounded p-3 text-center">
+                  <Lock className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Keep chatting to unlock education!
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Social Media - Level 4 (100 pts) */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center gap-2">

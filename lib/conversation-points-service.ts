@@ -49,25 +49,35 @@ export class ConversationPointsService {
    */
   async getConversationPoints(matchId: string, userId: string): Promise<number> {
     try {
-      // First try the RPC function
-      const { data: rpcData, error: rpcError } = await this.supabase.rpc('get_conversation_points', {
-        p_match_id: matchId,
-        p_user_id: userId
-      });
+      // Calculate points based on message types: 1 point for sent, 2 points for received
+      const { data: messages, error } = await this.supabase
+        .from('user_messages')
+        .select('sender_id')
+        .eq('match_id', matchId);
 
-      if (!rpcError && rpcData !== null) {
-        return rpcData;
+      if (error) {
+        console.error('Error fetching messages for points calculation:', error);
+        return 0;
       }
 
-      // Fallback: calculate directly from message count
-      console.log('RPC failed, using fallback calculation:', rpcError);
-      const messageCount = await this.getMessageCount(matchId);
-      return messageCount * 5;
-    } catch (err) {
-      console.error('Exception in getConversationPoints:', err);
-      // Final fallback: calculate from message count
-      const messageCount = await this.getMessageCount(matchId);
-      return messageCount * 5;
+      if (!messages || messages.length === 0) {
+        return 0;
+      }
+
+      let totalPoints = 0;
+      messages.forEach(message => {
+        if (message.sender_id === userId) {
+          totalPoints += 1; // 1 point for sending a message
+        } else {
+          totalPoints += 2; // 2 points for receiving a message
+        }
+      });
+
+      console.log(`Calculated points for user ${userId}: ${totalPoints} total points (${messages.length} total messages)`);
+      return totalPoints;
+    } catch (error) {
+      console.error('Error getting conversation points:', error);
+      return 0;
     }
   }
 
