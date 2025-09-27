@@ -22,6 +22,8 @@ import {
   generateCharacterResponse,
   convertMessagesToOpenAIFormat,
 } from "@/lib/openai-service";
+import { HorizontalSuggestions } from "@/components/ui/horizontal-suggestions";
+import { generateAICharacterSuggestions } from "@/lib/ai-assistant-service";
 
 interface AnimeCharacter {
   id: string;
@@ -128,17 +130,18 @@ export default function ChatPage() {
       console.log("Conversation result:", result);
 
       if (result.success && result.conversation) {
+        const conversation = result.conversation;
         console.log(
           "Loading existing conversation with",
-          result.conversation.messages.length,
+          conversation.messages.length,
           "messages"
         );
         // Load existing conversation
-        setConversationId(result.conversation.id);
-        setConnectionLevel(result.conversation.connection_level || 0);
+        setConversationId(conversation.id);
+        setConnectionLevel(conversation.connection_level || 0);
         setMessages(
-          result.conversation.messages.map((msg, index) => ({
-            id: `${result.conversation.id}-${index}`,
+          conversation.messages.map((msg, index) => ({
+            id: `${conversation.id}-${index}`,
             role: msg.role,
             content: msg.content,
             created_at: msg.timestamp,
@@ -346,6 +349,32 @@ export default function ChatPage() {
     }
   };
 
+  const handleGenerateSuggestions = async () => {
+    if (!character) return [];
+
+    try {
+      const result = await generateAICharacterSuggestions(
+        character.name,
+        character.personality,
+        messages
+      );
+
+      if (result.success && result.suggestions) {
+        return result.suggestions;
+      } else {
+        console.error("Failed to generate suggestions:", result.error);
+        return [];
+      }
+    } catch (error) {
+      console.error("Error generating suggestions:", error);
+      return [];
+    }
+  };
+
+  const handleSuggestionSelect = (suggestion: string) => {
+    setNewMessage(suggestion);
+  };
+
   if (!mounted || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -434,104 +463,150 @@ export default function ChatPage() {
 
       {/* Chat Messages */}
       <main className="flex-1 container mx-auto px-4 py-6 relative z-10 flex flex-col">
-        <div className="max-w-4xl mx-auto flex-1 flex flex-col">
-          <Card className="flex-1 bg-background/80 backdrop-blur-sm border-border/50 flex flex-col">
-            <CardContent className="flex-1 flex flex-col p-0">
-              {/* Messages Area */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex gap-3 ${
-                      message.role === "user" ? "justify-end" : "justify-start"
-                    }`}
-                  >
-                    {message.role === "assistant" && (
-                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                        {character.avatar_url ? (
-                          <img
-                            src={character.avatar_url}
-                            alt={character.name}
-                            className="w-full h-full object-cover rounded-full"
-                          />
-                        ) : (
-                          <Bot className="w-4 h-4 text-muted-foreground" />
+        <div className="max-w-7xl mx-auto flex-1 flex flex-col">
+          <div className="flex flex-col lg:flex-row gap-6 flex-1">
+            {/* Chat Area */}
+            <div className="flex-1 flex flex-col">
+              <Card className="flex-1 bg-background/80 backdrop-blur-sm border-border/50 flex flex-col">
+                <CardContent className="flex-1 flex flex-col p-0">
+                  {/* Messages Area */}
+                  <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                    {messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex gap-3 ${
+                          message.role === "user"
+                            ? "justify-end"
+                            : "justify-start"
+                        }`}
+                      >
+                        {message.role === "assistant" && (
+                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                            {character.avatar_url ? (
+                              <img
+                                src={character.avatar_url}
+                                alt={character.name}
+                                className="w-full h-full object-cover rounded-full"
+                              />
+                            ) : (
+                              <Bot className="w-4 h-4 text-muted-foreground" />
+                            )}
+                          </div>
+                        )}
+
+                        <div
+                          className={`max-w-[70%] rounded-lg px-4 py-2 ${
+                            message.role === "user"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-foreground"
+                          }`}
+                        >
+                          <p className="text-sm">{message.content}</p>
+                        </div>
+
+                        {message.role === "user" && (
+                          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                            <User className="w-4 h-4 text-primary-foreground" />
+                          </div>
                         )}
                       </div>
-                    )}
+                    ))}
 
-                    <div
-                      className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                        message.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-foreground"
-                      }`}
-                    >
-                      <p className="text-sm">{message.content}</p>
-                    </div>
-
-                    {message.role === "user" && (
-                      <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                        <User className="w-4 h-4 text-primary-foreground" />
+                    {sending && (
+                      <div className="flex gap-3 justify-start">
+                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                          {character.avatar_url ? (
+                            <img
+                              src={character.avatar_url}
+                              alt={character.name}
+                              className="w-full h-full object-cover rounded-full"
+                            />
+                          ) : (
+                            <Bot className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="bg-muted text-foreground rounded-lg px-4 py-2">
+                          <div className="flex space-x-1">
+                            <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
+                            <div
+                              className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
+                              style={{ animationDelay: "0.1s" }}
+                            ></div>
+                            <div
+                              className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
+                              style={{ animationDelay: "0.2s" }}
+                            ></div>
+                          </div>
+                        </div>
                       </div>
                     )}
-                  </div>
-                ))}
 
-                {sending && (
-                  <div className="flex gap-3 justify-start">
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                      {character.avatar_url ? (
-                        <img
-                          src={character.avatar_url}
-                          alt={character.name}
-                          className="w-full h-full object-cover rounded-full"
-                        />
-                      ) : (
-                        <Bot className="w-4 h-4 text-muted-foreground" />
-                      )}
-                    </div>
-                    <div className="bg-muted text-foreground rounded-lg px-4 py-2">
-                      <div className="flex space-x-1">
-                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-                        <div
-                          className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
-                          style={{ animationDelay: "0.1s" }}
-                        ></div>
-                        <div
-                          className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
-                          style={{ animationDelay: "0.2s" }}
-                        ></div>
-                      </div>
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* Message Input */}
+                  <div className="border-t border-border/50 p-4">
+                    <div className="flex gap-2">
+                      <Input
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        placeholder={`Message ${character.name}...`}
+                        disabled={sending}
+                        className="flex-1"
+                      />
+                      <Button
+                        onClick={sendMessage}
+                        disabled={!newMessage.trim() || sending}
+                        size="icon"
+                      >
+                        <Send className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
-                )}
+                </CardContent>
+              </Card>
+            </div>
 
-                <div ref={messagesEndRef} />
-              </div>
+            {/* AI Suggestions Panel */}
+            <div className="w-full lg:w-96 flex flex-col space-y-4">
+              <Card className="bg-background/80 backdrop-blur-sm border-border/50 flex flex-col relative min-h-[240px]">
+                <CardContent className="p-6 flex-1 flex flex-col">
+                  <div className="space-y-4 flex-1 flex flex-col">
+                    <div className="text-center">
+                      <h3 className="text-lg font-semibold text-pink-700 mb-2">
+                        AI Assistant
+                      </h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Ask Ani for messaging tips!
+                      </p>
+                    </div>
 
-              {/* Message Input */}
-              <div className="border-t border-border/50 p-4">
-                <div className="flex gap-2">
-                  <Input
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder={`Message ${character.name}...`}
-                    disabled={sending}
-                    className="flex-1"
+                    <div className="flex-1 flex flex-col">
+                      <HorizontalSuggestions
+                        onSuggestionSelect={handleSuggestionSelect}
+                        onGenerateSuggestions={handleGenerateSuggestions}
+                        disabled={sending}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+
+                {/* Anime Girl Image */}
+                <div className="absolute bottom-0 right-0 w-40 h-40 pointer-events-none">
+                  <img
+                    src="/ani.png"
+                    alt="Ani - AI Assistant"
+                    className="w-full h-full object-contain object-bottom-right"
                   />
-                  <Button
-                    onClick={sendMessage}
-                    disabled={!newMessage.trim() || sending}
-                    size="icon"
-                  >
-                    <Send className="w-4 h-4" />
-                  </Button>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </Card>
+
+              {/* Suggestions Box - Outside the main AI assistant panel */}
+              <div id="suggestions-container"></div>
+            </div>
+          </div>
         </div>
       </main>
     </div>
