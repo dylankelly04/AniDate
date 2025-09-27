@@ -53,10 +53,18 @@ export default function UserChatPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
+  const [previousMessageCount, setPreviousMessageCount] = useState(0);
 
   useEffect(() => {
     if (user && matchId) {
       fetchMatchAndMessages();
+      
+      // Set up polling for new messages every 2 seconds
+      const interval = setInterval(() => {
+        checkForNewMessages();
+      }, 2000);
+
+      return () => clearInterval(interval);
     }
   }, [user, matchId]);
 
@@ -66,6 +74,47 @@ export default function UserChatPage() {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const checkForNewMessages = async () => {
+    if (!user || !matchId) return;
+
+    try {
+      const { data: messagesData, error } = await supabase
+        .from("user_messages")
+        .select("*")
+        .eq("match_id", matchId)
+        .order("created_at", { ascending: true });
+
+      if (error || !messagesData) return;
+
+      const currentCount = messagesData.length;
+      
+      // If we have new messages and the count increased, play sound for new ones
+      if (currentCount > previousMessageCount && previousMessageCount > 0) {
+        const newMessages = messagesData.slice(previousMessageCount);
+        const messagesForCurrentUser = newMessages.filter(
+          msg => msg.receiver_id === user?.id && !msg.is_read
+        );
+        
+        if (messagesForCurrentUser.length > 0) {
+          console.log("New messages received, playing sound...");
+          soundManager.playMessageReceived();
+          
+          // Mark new messages as read
+          const messageIds = messagesForCurrentUser.map(msg => msg.id);
+          await supabase
+            .from("user_messages")
+            .update({ is_read: true })
+            .in("id", messageIds);
+        }
+      }
+
+      setMessages(messagesData);
+      setPreviousMessageCount(currentCount);
+    } catch (err) {
+      console.error("Error checking for new messages:", err);
+    }
   };
 
   const fetchMatchAndMessages = async () => {
@@ -128,19 +177,10 @@ export default function UserChatPage() {
       }
 
       setMessages(messagesData || []);
+      // Set initial message count (don't play sound on initial load)
+      setPreviousMessageCount(messagesData?.length || 0);
 
-      // Play sound for new messages received
-      if (messagesData && messagesData.length > 0) {
-        const newMessages = messagesData.filter(
-          (msg) => msg.receiver_id === user?.id && !msg.is_read
-        );
-        if (newMessages.length > 0) {
-          console.log("Playing message received sound...");
-          soundManager.playMessageReceived();
-        }
-      }
-
-      // Mark messages as read
+      // Mark messages as read (but don't play sound on page load)
       if (messagesData && messagesData.length > 0) {
         const unreadMessages = messagesData.filter(
           (msg) => msg.receiver_id === user?.id && !msg.is_read
@@ -240,7 +280,13 @@ export default function UserChatPage() {
         .eq("id", user.id)
         .single();
 
-      const result = await generateRealPersonSuggestions(messages, {
+      // Transform messages to the expected format
+      const formattedMessages = messages.map(msg => ({
+        role: msg.sender_id === user?.id ? 'user' : 'assistant',
+        content: msg.content
+      }));
+
+      const result = await generateRealPersonSuggestions(formattedMessages, {
         interests: profile?.interests || [],
         personality: profile?.bio || "",
       });

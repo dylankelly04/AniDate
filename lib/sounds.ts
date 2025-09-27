@@ -3,9 +3,14 @@ export class SoundManager {
   private static instance: SoundManager;
   private sounds: Map<string, HTMLAudioElement> = new Map();
   private enabled: boolean = true;
+  private initialized: boolean = false;
 
   private constructor() {
-    this.loadSounds();
+    // Only initialize on client side
+    if (typeof window !== 'undefined') {
+      this.loadSounds();
+      this.initialized = true;
+    }
   }
 
   public static getInstance(): SoundManager {
@@ -13,6 +18,13 @@ export class SoundManager {
       SoundManager.instance = new SoundManager();
     }
     return SoundManager.instance;
+  }
+
+  private ensureInitialized() {
+    if (!this.initialized && typeof window !== 'undefined') {
+      this.loadSounds();
+      this.initialized = true;
+    }
   }
 
   private loadSounds() {
@@ -42,10 +54,12 @@ export class SoundManager {
   }
 
   public play(soundKey: string, volume: number = 0.5) {
-    if (!this.enabled) {
-      console.log(`Sound ${soundKey} disabled`);
+    if (!this.enabled || typeof window === 'undefined') {
+      console.log(`Sound ${soundKey} disabled or not in browser`);
       return;
     }
+
+    this.ensureInitialized();
 
     const audio = this.sounds.get(soundKey);
     if (audio) {
