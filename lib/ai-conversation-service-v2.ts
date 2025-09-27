@@ -13,6 +13,7 @@ export interface AIConversation {
   character_name: string;
   character_series: string;
   messages: AIMessage[];
+  connection_level: number;
   created_at: string;
   updated_at: string;
 }
@@ -110,12 +111,27 @@ export async function addMessage(
 
     const updatedMessages = [...(conversation.messages || []), newMessage];
 
-    // Update the conversation with the new message
+    // Calculate connection level based on message count
+    const connectionLevel =
+      updatedMessages.length < 5
+        ? 0
+        : updatedMessages.length < 10
+        ? 1
+        : updatedMessages.length < 20
+        ? 2
+        : updatedMessages.length < 40
+        ? 3
+        : updatedMessages.length < 80
+        ? 4
+        : 5;
+
+    // Update the conversation with the new message and connection level
     const { error: updateError } = await supabase
       .from("ai_conversations")
       .update({
         messages: updatedMessages,
         updated_at: new Date().toISOString(),
+        connection_level: connectionLevel,
       })
       .eq("id", conversationId);
 

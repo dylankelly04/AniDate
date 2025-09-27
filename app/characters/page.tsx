@@ -28,6 +28,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useClientOnly } from "@/hooks/use-client-only";
 import { useAuth } from "@/lib/auth-context";
 import { getUserConversations } from "@/lib/ai-conversation-service-v2";
+import { StarRating } from "@/components/ui/star-rating";
 
 interface AnimeCharacter {
   id: string;
@@ -478,9 +479,15 @@ export default function CharactersPage() {
                                     </h4>
                                     <MessageCircle className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                                   </div>
-                                  <p className="text-xs text-muted-foreground truncate">
-                                    {character.series}
-                                  </p>
+                                  <div className="flex items-center justify-between mt-0.5">
+                                    <p className="text-xs text-muted-foreground truncate">
+                                      {character.series}
+                                    </p>
+                                    <StarRating
+                                      level={conversation.connection_level || 0}
+                                      size="sm"
+                                    />
+                                  </div>
                                   {lastMessage && (
                                     <div className="mt-0.5">
                                       <p className="text-xs text-muted-foreground line-clamp-1">

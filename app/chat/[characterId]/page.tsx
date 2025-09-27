@@ -17,6 +17,7 @@ import {
   getConversationForCharacter,
   type AIMessage,
 } from "@/lib/ai-conversation-service-v2";
+import { StarRating, CONNECTION_LEVELS } from "@/components/ui/star-rating";
 
 interface AnimeCharacter {
   id: string;
@@ -52,6 +53,7 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [connectionLevel, setConnectionLevel] = useState<number>(0);
 
   const characterId = params.characterId as string;
 
@@ -129,6 +131,7 @@ export default function ChatPage() {
         );
         // Load existing conversation
         setConversationId(result.conversation.id);
+        setConnectionLevel(result.conversation.connection_level || 0);
         setMessages(
           result.conversation.messages.map((msg, index) => ({
             id: `${result.conversation.id}-${index}`,
@@ -263,6 +266,22 @@ export default function ChatPage() {
           response
         );
         console.log("Assistant message save result:", assistantMsgResult);
+
+        // Update connection level based on new message count
+        const newMessageCount = messages.length + 2; // +2 for user and assistant messages
+        const newConnectionLevel =
+          newMessageCount < 5
+            ? 0
+            : newMessageCount < 10
+            ? 1
+            : newMessageCount < 20
+            ? 2
+            : newMessageCount < 40
+            ? 3
+            : newMessageCount < 80
+            ? 4
+            : 5;
+        setConnectionLevel(newConnectionLevel);
       } else {
         console.log("No conversation ID, skipping assistant message save");
       }
@@ -367,6 +386,14 @@ export default function ChatPage() {
                 <p className="text-sm text-muted-foreground">
                   {character.series}
                 </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <StarRating level={connectionLevel} size="sm" />
+                  <span className="text-xs text-muted-foreground">
+                    {CONNECTION_LEVELS[
+                      connectionLevel as keyof typeof CONNECTION_LEVELS
+                    ]?.name || "Stranger"}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
