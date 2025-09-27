@@ -109,9 +109,11 @@ export default function HomescreenPage() {
                 Practice your conversation skills with AI anime characters.
                 Build confidence before connecting with real people.
               </p>
-              <Button className="w-full" size="lg">
-                Start AI Practice
-                <MessageCircle className="w-4 h-4 ml-2" />
+              <Button className="w-full" size="lg" asChild>
+                <Link href="/characters">
+                  Start AI Practice
+                  <MessageCircle className="w-4 h-4 ml-2" />
+                </Link>
               </Button>
             </div>
 
