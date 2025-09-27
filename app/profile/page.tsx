@@ -309,30 +309,6 @@ export default function ProfilePage() {
               <span className="text-xl font-bold text-foreground">AniDate</span>
             </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            {editing ? (
-              <>
-                <Button variant="outline" size="sm" onClick={handleCancel}>
-                  <X className="w-4 h-4 mr-2" />
-                  Cancel
-                </Button>
-                <Button size="sm" onClick={handleSave} disabled={saving}>
-                  <Save className="w-4 h-4 mr-2" />
-                  {saving ? "Saving..." : "Save"}
-                </Button>
-              </>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditing(true)}
-              >
-                <Edit3 className="w-4 h-4 mr-2" />
-                Edit Profile
-              </Button>
-            )}
-          </div>
         </div>
       </header>
 
@@ -509,6 +485,42 @@ export default function ProfilePage() {
                               </span>
                             )}
                           </div>
+                        )}
+                      </div>
+
+                      {/* Edit Profile Button */}
+                      <div className="mt-6 pt-4 border-t border-border/50">
+                        {editing ? (
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleCancel}
+                              className="flex-1"
+                            >
+                              <X className="w-4 h-4 mr-2" />
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={handleSave}
+                              disabled={saving}
+                              className="flex-1"
+                            >
+                              <Save className="w-4 h-4 mr-2" />
+                              {saving ? "Saving..." : "Save"}
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditing(true)}
+                            className="w-full"
+                          >
+                            <Edit3 className="w-4 h-4 mr-2" />
+                            Edit Profile
+                          </Button>
                         )}
                       </div>
                     </div>
