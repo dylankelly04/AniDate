@@ -15,7 +15,6 @@ import {
   Star, 
   MapPin, 
   Calendar,
-  MessageCircle,
   ArrowLeft,
   Users
 } from "lucide-react";
@@ -313,12 +312,6 @@ export default function DiscoverPage() {
                 </Link>
               </Button>
               <Button variant="ghost" size="sm" asChild>
-                <Link href="/chat">
-                  <MessageCircle className="w-4 h-4 mr-2" />
-                  AI Chat
-                </Link>
-              </Button>
-              <Button variant="ghost" size="sm" asChild>
                 <Link href="/homescreen">
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Back to Home
@@ -371,12 +364,6 @@ export default function DiscoverPage() {
               <Link href="/matches">
                 <Users className="w-4 h-4 mr-2" />
                 Matches
-              </Link>
-            </Button>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/chat">
-                <MessageCircle className="w-4 h-4 mr-2" />
-                AI Chat
               </Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>

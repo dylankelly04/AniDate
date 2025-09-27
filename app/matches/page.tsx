@@ -40,15 +40,12 @@ export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [unseenMatchesCount, setUnseenMatchesCount] = useState(0);
 
   const supabase = createClient();
 
   useEffect(() => {
     if (user) {
       fetchMatches();
-      // Reset unseen count when user visits matches page
-      setUnseenMatchesCount(0);
     }
   }, [user]);
 
@@ -108,19 +105,6 @@ export default function MatchesPage() {
       });
 
       setMatches(Array.from(uniqueMatches.values()));
-
-      // Count unseen matches (matches created in the last 24 hours)
-      // Only count if user hasn't visited matches page yet
-      if (unseenMatchesCount === 0) {
-        const oneDayAgo = new Date();
-        oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-        
-        const unseenCount = Array.from(uniqueMatches.values()).filter(match => 
-          new Date(match.created_at) > oneDayAgo
-        ).length;
-        
-        setUnseenMatchesCount(unseenCount);
-      }
 
     } catch (err) {
       console.error('Exception in fetchMatches:', err);
@@ -199,11 +183,6 @@ export default function MatchesPage() {
             <h1 className="text-3xl font-bold mb-2">Your Matches</h1>
             <p className="text-muted-foreground">
               {matches.length} {matches.length === 1 ? 'match' : 'matches'} found
-              {unseenMatchesCount > 0 && (
-                <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                  {unseenMatchesCount} new
-                </span>
-              )}
             </p>
           </div>
 
