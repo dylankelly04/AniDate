@@ -147,14 +147,16 @@ export default function VideoCallPage() {
       isConnected: callState.isConnected,
       isIncoming: callState.isIncoming,
       isAnswering: callState.isAnswering,
+      isCaller: callState.isCaller,
       hasMatch: !!match,
       hasUser: !!user?.id
     });
 
     if (match && user?.id && !callState.isConnecting && !callState.isConnected) {
       // Only start a new call if we're not answering an incoming call
-      if (!callState.isIncoming && !callState.isAnswering) {
-        console.log('📞 Starting outgoing call');
+      if (!callState.isIncoming && !callState.isAnswering && !callState.isCaller) {
+        console.log('📞 ✅ Starting outgoing call - user is the caller');
+        console.log('📞 ✅ Will set isCaller to true and send ONE offer');
         startCall(match.matched_user.id);
         
         const timeout = setTimeout(() => {
@@ -163,10 +165,18 @@ export default function VideoCallPage() {
         
         setCallTimeout(timeout);
       } else {
-        console.log('📞 Answering incoming call or already answering - NOT starting new call');
+        console.log('📞 ✅ Answering incoming call or already answering - NOT starting new call');
+        console.log('📞 ✅ User will find and answer pending offer instead');
       }
+    } else {
+      console.log('📞 ⏸️ Skipping call logic - conditions not met:', {
+        hasMatch: !!match,
+        hasUser: !!user?.id,
+        isConnecting: callState.isConnecting,
+        isConnected: callState.isConnected
+      });
     }
-  }, [match, user?.id, callState.isConnecting, callState.isConnected, callState.isIncoming, callState.isAnswering, startCall]);
+  }, [match, user?.id, callState.isConnecting, callState.isConnected, callState.isIncoming, callState.isAnswering, callState.isCaller, startCall]);
 
   // Clear timeout when call connects or ends
   useEffect(() => {
@@ -291,7 +301,7 @@ export default function VideoCallPage() {
             <div className="flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span className="text-sm">
-                {callState.isAnswering ? 'Joining call...' : 'Calling... waiting for answer'}
+                {callState.isCaller ? 'Calling... waiting for answer' : 'Joining call...'}
               </span>
             </div>
           )}

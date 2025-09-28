@@ -16,6 +16,7 @@ export interface CallState {
   isConnecting: boolean;
   isIncoming: boolean;
   isAnswering: boolean; // New state to track if we're answering a call
+  isCaller: boolean; // Track if we initiated the call
   remoteUserId?: string;
   localStream?: MediaStream;
   remoteStream?: MediaStream;
@@ -28,6 +29,7 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
     isConnecting: false,
     isIncoming: false,
     isAnswering: false,
+    isCaller: false,
   });
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -115,6 +117,7 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
       isConnecting: false,
       isIncoming: false,
       isAnswering: false,
+      isCaller: false,
       localStream: undefined,
       remoteStream: undefined,
     });
@@ -233,7 +236,8 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
       console.log('📞 Starting call to:', remoteUserId, 'Current state:', {
         isConnecting: callState.isConnecting,
         isIncoming: callState.isIncoming,
-        isAnswering: callState.isAnswering
+        isAnswering: callState.isAnswering,
+        isCaller: callState.isCaller
       });
 
       // Prevent starting call if already in progress or answering
@@ -248,8 +252,10 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
         remoteUserId,
         isIncoming: false,
         isAnswering: false,
+        isCaller: true,
         error: undefined 
       }));
+      console.log('📞 Set isCaller to true - user is the caller');
 
       const stream = await getUserMedia();
       if (!stream) return;
@@ -288,8 +294,10 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
         remoteUserId: fromUserId,
         isIncoming: false,
         isAnswering: true,
+        isCaller: false,
         error: undefined 
       }));
+      console.log('📞 Set isCaller to false - user is answering');
 
       const stream = await getUserMedia();
       if (!stream) return;
@@ -324,6 +332,7 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
   useEffect(() => {
     const checkPendingOffers = async () => {
       if (autoAnswerIncoming) {
+        console.log('📞 Checking for pending offers with autoAnswerIncoming:', autoAnswerIncoming);
         try {
           const { data: pendingOffers } = await supabase
             .from('video_call_signals')
@@ -335,23 +344,33 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
             .order('created_at', { ascending: false })
             .limit(1);
 
+          console.log('📞 Pending offers found:', pendingOffers?.length || 0);
+
           if (pendingOffers && pendingOffers.length > 0) {
             const offer = pendingOffers[0];
-            console.log('📞 Found pending offer on mount:', offer.id);
+            console.log('📞 Found pending offer on mount:', offer.id, 'from:', offer.from_user_id);
             
             if (!callState.isConnected && !callState.isConnecting) {
+              console.log('📞 Processing pending offer - setting answerer state');
               setCallState(prev => ({ 
                 ...prev, 
                 isIncoming: true,
                 isAnswering: true,
+                isCaller: false,
                 remoteUserId: offer.from_user_id 
               }));
               answerCall(offer.signal_data.offer, offer.from_user_id);
+            } else {
+              console.log('📞 Skipping pending offer - already in call state');
             }
+          } else {
+            console.log('📞 No pending offers found - user will start new call');
           }
         } catch (error) {
           console.error('Error checking pending offers:', error);
         }
+      } else {
+        console.log('📞 Not checking pending offers - autoAnswerIncoming is false');
       }
     };
 
@@ -403,6 +422,7 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
                   ...prev, 
                   isIncoming: true,
                   isAnswering: true,
+                  isCaller: false,
                   remoteUserId: signal.from_user_id 
                 }));
                 answerCall(data.offer, signal.from_user_id);
@@ -410,7 +430,8 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
                 console.log('📞 Showing incoming call popup');
                 setCallState(prev => ({ 
                   ...prev, 
-                  isIncoming: true, 
+                  isIncoming: true,
+                  isCaller: false,
                   remoteUserId: signal.from_user_id 
                 }));
                 onIncomingCall?.(signal.from_user_id);
