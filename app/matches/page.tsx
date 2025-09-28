@@ -13,6 +13,8 @@ import {
   ArrowLeft,
   Users,
   Calendar,
+  MapPin,
+  AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { conversationPointsService } from "@/lib/conversation-points-service";
@@ -47,6 +49,7 @@ interface Match {
     height_in?: number;
     zodiac_sign?: string;
   };
+  waiting_for_user?: boolean;
 }
 
 export default function MatchesPage() {
@@ -136,7 +139,7 @@ export default function MatchesPage() {
       // Deduplicate matches and get the other user's profile
       const uniqueMatches = new Map();
 
-      data?.forEach((match) => {
+      for (const match of data || []) {
         const otherUserId =
           match.user1_id === user?.id ? match.user2_id : match.user1_id;
         const otherUserProfile =
@@ -144,14 +147,24 @@ export default function MatchesPage() {
             ? match.user2_profile
             : match.user1_profile;
 
+        // Check if agent is waiting for user input on this match
+        const { data: waitingAction } = await supabase
+          .from("agent_actions")
+          .select("*")
+          .eq("user_id", user?.id)
+          .eq("target_user_id", otherUserId)
+          .eq("status", "waiting_for_user")
+          .single();
+
         // Only add if we haven't seen this user before
         if (!uniqueMatches.has(otherUserId)) {
           uniqueMatches.set(otherUserId, {
             ...match,
             matched_user: otherUserProfile,
+            waiting_for_user: !!waitingAction,
           });
         }
-      });
+      }
 
       const matchesArray = Array.from(uniqueMatches.values());
       setMatches(matchesArray);
@@ -304,6 +317,12 @@ export default function MatchesPage() {
                       }}
                     >
                       {match.matched_user?.full_name}
+                      {match.waiting_for_user && (
+                        <AlertCircle
+                          className="w-4 h-4 text-yellow-500"
+                          title="Waiting for your input"
+                        />
+                      )}
                     </CardTitle>
             <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-1">
@@ -321,11 +340,29 @@ export default function MatchesPage() {
                       </div>
 
 
+                      {/* Waiting for User Indicator */}
+                      {match.waiting_for_user && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                          <div className="flex items-center gap-2 text-yellow-800">
+                            <AlertCircle className="w-4 h-4" />
+                            <span className="text-sm font-medium">
+                              Waiting for your input
+                            </span>
+                          </div>
+                          <p className="text-xs text-yellow-700 mt-1">
+                            Your AI agent needs your help to respond to this
+                            conversation.
+                          </p>
+                        </div>
+                      )}
+
                       {/* Chat Button */}
                       <Button asChild className="w-full">
                         <Link href={`/user-chat/${match.id}`}>
                           <MessageCircle className="w-4 h-4 mr-2" />
-                          Start Chat
+                          {match.waiting_for_user
+                            ? "Respond Now"
+                            : "Start Chat"}
                         </Link>
                       </Button>
                     </div>
