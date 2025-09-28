@@ -8,6 +8,7 @@ interface UseWebRTCProps {
   userId: string;
   onIncomingCall?: (fromUserId: string) => void;
   onCallEnded?: () => void;
+  autoAnswerIncoming?: boolean;
 }
 
 export interface CallState {
@@ -20,7 +21,7 @@ export interface CallState {
   error?: string;
 }
 
-export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded }: UseWebRTCProps) {
+export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAnswerIncoming = false }: UseWebRTCProps) {
   const [callState, setCallState] = useState<CallState>({
     isConnected: false,
     isConnecting: false,
@@ -269,8 +270,22 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded }: UseW
   };
 
   // End the call
-  const endCall = useCallback(() => {
+  const endCall = useCallback(async () => {
     console.log('🔚 Ending call...');
+    
+    // Send end-call signal to remote user if we have their ID
+    if (callState.remoteUserId) {
+      try {
+        await sendSignalingMessage({
+          type: 'end-call',
+          from: userId,
+          to: callState.remoteUserId,
+        });
+        console.log('📤 Sent end-call signal to remote user');
+      } catch (error) {
+        console.error('Error sending end-call signal:', error);
+      }
+    }
     
     // Close peer connection
     if (peerConnectionRef.current) {
@@ -307,7 +322,7 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded }: UseW
 
     // Notify parent component
     onCallEnded?.();
-  }, [callState.localStream, onCallEnded]);
+  }, [callState.localStream, callState.remoteUserId, userId, onCallEnded, sendSignalingMessage]);
 
   // Listen for signaling messages
   useEffect(() => {
@@ -336,7 +351,14 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded }: UseW
                 isIncoming: true, 
                 remoteUserId: signal.from_user_id 
               }));
-              onIncomingCall?.(signal.from_user_id);
+              
+              if (autoAnswerIncoming) {
+                // Auto-answer the incoming call
+                console.log('📞 Auto-answering incoming call');
+                answerCall(data.offer, signal.from_user_id);
+              } else {
+                onIncomingCall?.(signal.from_user_id);
+              }
               break;
 
             case 'answer':
@@ -352,6 +374,7 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded }: UseW
               break;
 
             case 'end-call':
+              console.log('📞 Call ended by remote user');
               endCall();
               break;
           }

@@ -43,6 +43,7 @@ export default function VideoCallPage() {
   } = useWebRTC({
     matchId,
     userId: user?.id || '',
+    autoAnswerIncoming: true, // Auto-answer when user navigates to video call page
     onCallEnded: () => {
       router.push(`/user-chat/${matchId}`);
     },
@@ -139,18 +140,24 @@ export default function VideoCallPage() {
     return () => clearInterval(interval);
   }, [callState.isConnected, callDuration]);
 
-  // Auto-start call when page loads
+  // Auto-start call when page loads or answer incoming call
   useEffect(() => {
-    if (match && user?.id && !callState.isConnecting && !callState.isConnected && !callState.isIncoming) {
-      console.log('🎬 Starting video call automatically');
-      startCall(match.matched_user.id);
-      
-      // Set timeout for unanswered calls (30 seconds)
-      const timeout = setTimeout(() => {
-        handleEndCall();
-      }, 30000);
-      
-      setCallTimeout(timeout);
+    if (match && user?.id && !callState.isConnecting && !callState.isConnected) {
+      if (callState.isIncoming) {
+        console.log('📞 Answering incoming video call');
+        // The WebRTC hook will handle the incoming call automatically
+        // when the user navigates to this page
+      } else {
+        console.log('🎬 Starting video call automatically');
+        startCall(match.matched_user.id);
+        
+        // Set timeout for unanswered calls (30 seconds)
+        const timeout = setTimeout(() => {
+          handleEndCall();
+        }, 30000);
+        
+        setCallTimeout(timeout);
+      }
     }
   }, [match, user?.id, callState.isConnecting, callState.isConnected, callState.isIncoming, startCall]);
 

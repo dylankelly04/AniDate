@@ -11,8 +11,8 @@ export const PROFILE_UNLOCK_LEVELS: ProfileUnlockLevel[] = [
   {
     level: 1,
     pointsRequired: 0,
-    unlocks: ["basic_info", "bio", "avatar"],
-    description: "Basic profile information"
+    unlocks: ["age", "bio"],
+    description: "Age and bio only"
   },
   {
     level: 2,
