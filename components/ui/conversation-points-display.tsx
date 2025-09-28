@@ -38,8 +38,7 @@ export function ConversationPointsDisplay({
   // Use the points prop directly instead of internal state
   const conversationPoints = initialPoints || 0;
   
-  // Debug logging
-  console.log(`ConversationPointsDisplay - Received points: ${initialPoints}, Using: ${conversationPoints}`);
+  // Debug logging removed to reduce console spam
 
   useEffect(() => {
     // Only fetch points if not provided as prop

@@ -45,7 +45,6 @@ export function ProfileModal({ isOpen, onClose, user, conversationPoints }: Prof
   
   const isFieldUnlocked = (field: string) => {
     const unlocked = conversationPointsService.isFieldUnlocked(conversationPoints, field);
-    console.log(`Field "${field}" with ${conversationPoints} points: ${unlocked ? 'UNLOCKED' : 'LOCKED'}`);
     return unlocked;
   };
 
@@ -56,7 +55,7 @@ export function ProfileModal({ isOpen, onClose, user, conversationPoints }: Prof
       : user.anime_avatar_url || user.avatar_url || "";
   };
 
-  console.log(`ProfileModal - Points: ${conversationPoints}, User:`, user);
+  // Debug logging removed to reduce console spam
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

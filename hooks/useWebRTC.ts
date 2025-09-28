@@ -112,23 +112,72 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded }: UseW
   // Get user media (camera and microphone)
   const getUserMedia = async (): Promise<MediaStream | null> => {
     try {
+      console.log('🎥 Requesting camera and microphone access...');
+      
+      // Stop any existing stream first
+      if (callState.localStream) {
+        console.log('🛑 Stopping existing stream before getting new one');
+        callState.localStream.getTracks().forEach(track => track.stop());
+      }
+      
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: 'user'
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true
+        }
       });
 
+      console.log('✅ Media stream obtained:', stream);
+      console.log('📹 Video tracks:', stream.getVideoTracks().length);
+      console.log('🎤 Audio tracks:', stream.getAudioTracks().length);
+
+      // Update state first
       setCallState(prev => ({ ...prev, localStream: stream }));
       
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
+      // Set video source with retry mechanism
+      const setVideoSource = () => {
+        console.log('🔍 Checking video ref:', localVideoRef.current);
+        console.log('🔍 Checking stream:', stream);
+        
+        if (localVideoRef.current && stream) {
+          console.log('📺 Setting video source to local video element');
+          localVideoRef.current.srcObject = stream;
+          
+          // Ensure video plays
+          localVideoRef.current.onloadedmetadata = () => {
+            console.log('📺 Video metadata loaded, attempting to play');
+            localVideoRef.current?.play()
+              .then(() => console.log('✅ Video playing successfully'))
+              .catch(e => console.error('❌ Play error:', e));
+          };
+          
+          return true;
+        } else {
+          console.warn('⚠️ Local video ref or stream not available');
+          console.warn('   - Video ref:', localVideoRef.current);
+          console.warn('   - Stream:', stream);
+          return false;
+        }
+      };
+
+      // Try immediately, then retry with increasing delays
+      if (!setVideoSource()) {
+        setTimeout(setVideoSource, 100);
+        setTimeout(setVideoSource, 500);
+        setTimeout(setVideoSource, 1000);
       }
 
       return stream;
     } catch (error) {
-      console.error('Error accessing media devices:', error);
+      console.error('❌ Error accessing media devices:', error);
       setCallState(prev => ({ 
         ...prev, 
-        error: 'Could not access camera or microphone' 
+        error: `Could not access camera or microphone: ${error instanceof Error ? error.message : 'Unknown error'}` 
       }));
       return null;
     }
@@ -144,6 +193,7 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded }: UseW
         error: undefined 
       }));
 
+      // Get user media first so camera shows immediately
       const stream = await getUserMedia();
       if (!stream) return;
 
@@ -220,15 +270,30 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded }: UseW
 
   // End the call
   const endCall = useCallback(() => {
+    console.log('🔚 Ending call...');
+    
     // Close peer connection
     if (peerConnectionRef.current) {
+      console.log('🔌 Closing peer connection');
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
 
-    // Stop local stream
+    // Stop local stream tracks
     if (callState.localStream) {
-      callState.localStream.getTracks().forEach(track => track.stop());
+      console.log('🛑 Stopping local stream tracks');
+      callState.localStream.getTracks().forEach(track => {
+        console.log(`🛑 Stopping ${track.kind} track`);
+        track.stop();
+      });
+    }
+
+    // Clear video refs
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
     }
 
     // Reset state
@@ -236,6 +301,8 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded }: UseW
       isConnected: false,
       isConnecting: false,
       isIncoming: false,
+      localStream: undefined,
+      remoteStream: undefined,
     });
 
     // Notify parent component
@@ -295,14 +362,27 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded }: UseW
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [matchId, userId, onIncomingCall, endCall]);
+  }, [matchId, userId, onIncomingCall]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      endCall();
+      // Direct cleanup without calling endCall to avoid infinite loop
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      if (callState.localStream) {
+        callState.localStream.getTracks().forEach(track => track.stop());
+      }
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+      }
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = null;
+      }
     };
-  }, [endCall]);
+  }, []); // Empty dependency array to avoid infinite loop
 
   return {
     callState,

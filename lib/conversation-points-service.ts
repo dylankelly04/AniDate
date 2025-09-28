@@ -40,14 +40,14 @@ export const PROFILE_UNLOCK_LEVELS: ProfileUnlockLevel[] = [
   },
   {
     level: 6,
-    pointsRequired: 1000,
+    pointsRequired: 750,
     unlocks: ["video_chat"],
     description: "Video chat feature"
   }
 ];
 
 // Video chat unlock threshold
-export const VIDEO_CHAT_UNLOCK_POINTS = 1000;
+export const VIDEO_CHAT_UNLOCK_POINTS = 750;
 
 export class ConversationPointsService {
   private supabase = createClient();
@@ -82,7 +82,7 @@ export class ConversationPointsService {
         }
       });
 
-      console.log(`Calculated points for user ${userId}: ${totalPoints} total points (${messages.length} total messages)`);
+      // Debug logging removed
       return totalPoints;
     } catch (error) {
       console.error('Error getting conversation points:', error);
@@ -143,11 +143,9 @@ export class ConversationPointsService {
     // Check all levels up to and including the current level
     for (const level of PROFILE_UNLOCK_LEVELS) {
       if (points >= level.pointsRequired && level.unlocks.includes(field)) {
-        console.log(`Field "${field}" unlocked at level ${level.level} (${level.pointsRequired} pts) with ${points} points`);
         return true;
       }
     }
-    console.log(`Field "${field}" locked - need more points (current: ${points})`);
     return false;
   }
 

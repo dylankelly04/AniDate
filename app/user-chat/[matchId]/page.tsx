@@ -12,12 +12,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Heart, Send, ArrowLeft, MessageCircle, User, X, Eye, EyeOff, Video } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { HorizontalSuggestions } from "@/components/ui/horizontal-suggestions";
 import { generateRealPersonSuggestions } from "@/lib/ai-assistant-service";
 import { ConversationPointsDisplay } from "@/components/ui/conversation-points-display";
 import { conversationPointsService, VIDEO_CHAT_UNLOCK_POINTS } from "@/lib/conversation-points-service";
-import { VideoCallModal } from "@/components/ui/video-call-modal";
+// Video call now uses separate page instead of modal
 import { ProfileModal } from "@/components/ui/profile-modal";
 
 interface Message {
@@ -66,6 +66,7 @@ interface Match {
 export default function UserChatPage() {
   const { user } = useAuth();
   const params = useParams();
+  const router = useRouter();
   const matchId = params.matchId as string;
 
   const [match, setMatch] = useState<Match | null>(null);
@@ -79,15 +80,14 @@ export default function UserChatPage() {
   const [showFullSizeImage, setShowFullSizeImage] = useState(false);
   const [showOriginalImage, setShowOriginalImage] = useState(false);
   const [showNewMessageIndicator, setShowNewMessageIndicator] = useState(false);
-  const [showVideoCall, setShowVideoCall] = useState(false);
-  const [incomingCall, setIncomingCall] = useState<{
-    fromUserId: string;
-    offer?: RTCSessionDescriptionInit;
-  } | null>(null);
+  // Video call state removed - now uses separate page
+  const [lastSoundPlayedAt, setLastSoundPlayedAt] = useState<number>(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
+
+  // Camera cleanup is handled by the video call page when navigating away
   const [previousMessageCount, setPreviousMessageCount] = useState(0);
 
   useEffect(() => {
@@ -105,25 +105,15 @@ export default function UserChatPage() {
     }
   }, [user, matchId]);
 
+  // Simple auto-scroll: only on initial load, never interfere with user scrolling
   useEffect(() => {
-    // Only auto-scroll if user is near the bottom of the chat or if it's a new message from them
-    const chatContainer = messagesEndRef.current?.parentElement;
-    if (chatContainer) {
-      const isNearBottom = chatContainer.scrollTop + chatContainer.clientHeight >= chatContainer.scrollHeight - 100;
-      const isNewMessage = messages.length > previousMessageCount;
-      const lastMessage = messages[messages.length - 1];
-      const isOwnMessage = lastMessage?.sender_id === user?.id;
-      
-      // Auto-scroll if: user is near bottom, or they just sent a message, or it's the initial load
-      if (isNearBottom || (isNewMessage && isOwnMessage) || messages.length <= 1) {
-        setTimeout(() => {
-          scrollToBottom();
-        }, 100);
-        setShowNewMessageIndicator(false);
-      } else if (isNewMessage && !isOwnMessage) {
-        // Show indicator if there's a new message from other user and user is scrolled up
-        setShowNewMessageIndicator(true);
-      }
+    const isNewMessage = messages.length > previousMessageCount;
+    const lastMessage = messages[messages.length - 1];
+    const isOwnMessage = lastMessage?.sender_id === user?.id;
+    
+    // Only show new message indicator for incoming messages when user is scrolled up
+    if (isNewMessage && !isOwnMessage) {
+      setShowNewMessageIndicator(true);
     }
     
     // Update previous message count for next comparison
@@ -132,7 +122,7 @@ export default function UserChatPage() {
 
   // Refresh points whenever messages change
   useEffect(() => {
-    console.log(`Messages array changed. Length: ${messages.length}`);
+      // Debug logging removed
     if (messages.length > 0 && user && matchId) {
       // Use the conversation points service to calculate points properly (1 pt sent, 2 pts received)
       fetchConversationPoints();
@@ -141,10 +131,39 @@ export default function UserChatPage() {
     }
   }, [messages, user, matchId]); // Changed from messages.length to messages to catch all changes
 
-  // Debug: Track when conversationPoints state changes
+  // Debug logging removed to reduce console spam
+
+  // Mark messages as read when user is actively viewing the chat
   useEffect(() => {
-    console.log(`conversationPoints state changed to: ${conversationPoints}`);
-  }, [conversationPoints]);
+    const markMessagesAsRead = async () => {
+      if (!user || !messages.length) return;
+      
+      const unreadMessages = messages.filter(
+        msg => msg.receiver_id === user.id && !msg.is_read
+      );
+      
+      if (unreadMessages.length > 0) {
+        // Debug logging removed
+        
+        const messageIds = unreadMessages.map(msg => msg.id);
+        await supabase
+          .from("user_messages")
+          .update({ is_read: true })
+          .in("id", messageIds);
+        
+        // Update local state to reflect read status
+        setMessages(prevMessages => 
+          prevMessages.map(msg => 
+            messageIds.includes(msg.id) ? { ...msg, is_read: true } : msg
+          )
+        );
+      }
+    };
+
+    // Debounce the read marking to avoid excessive updates
+    const timeoutId = setTimeout(markMessagesAsRead, 500);
+    return () => clearTimeout(timeoutId);
+  }, [messages, user, supabase]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -184,7 +203,7 @@ export default function UserChatPage() {
 
       const currentCount = messagesData.length;
       
-      // If we have new messages and the count increased, play sound for new ones
+      // If we have new messages and the count increased, handle them
       if (currentCount > previousMessageCount && previousMessageCount > 0) {
         const newMessages = messagesData.slice(previousMessageCount);
         const messagesForCurrentUser = newMessages.filter(
@@ -192,15 +211,26 @@ export default function UserChatPage() {
         );
         
         if (messagesForCurrentUser.length > 0) {
-          console.log("New messages received, playing sound...");
-          soundManager.playMessageReceived();
+          console.log(`📨 ${messagesForCurrentUser.length} new messages received`);
           
-          // Mark new messages as read
+          // Mark new messages as read FIRST
           const messageIds = messagesForCurrentUser.map(msg => msg.id);
           await supabase
             .from("user_messages")
             .update({ is_read: true })
             .in("id", messageIds);
+          
+          console.log("✅ Messages marked as read");
+          
+          // Play sound only once per batch and with debounce (minimum 2 seconds between sounds)
+          const now = Date.now();
+          if (now - lastSoundPlayedAt > 2000) {
+            console.log("🔊 Playing message received sound");
+            soundManager.playMessageReceived();
+            setLastSoundPlayedAt(now);
+          } else {
+            console.log("🔇 Skipping sound (too recent)");
+          }
         }
       }
 
@@ -227,12 +257,12 @@ export default function UserChatPage() {
       // First, get the match details
       const { data: matchData, error: matchError } = await supabase
         .from("matches")
-          .select(
-            `
-            *,
-            matched_user:profiles!matches_user2_id_fkey(
-              id,
-              full_name,
+        .select(
+          `
+          *,
+          matched_user:profiles!matches_user2_id_fkey(
+            id,
+            full_name,
               avatar_url,
               original_avatar_url,
               anime_avatar_url,
@@ -251,9 +281,9 @@ export default function UserChatPage() {
               height_ft,
               height_in,
               zodiac_sign
-            )
-          `
           )
+        `
+        )
         .eq("id", matchId)
         .eq("status", "accepted")
         .single();
@@ -656,8 +686,9 @@ export default function UserChatPage() {
                 />
               )}
 
+
               {/* Video Call Button */}
-              {user && match?.matched_user && conversationPoints >= 10 && (
+              {user && match?.matched_user && conversationPoints >= 750 && (
                 <Card className="bg-gradient-to-r from-green-500/10 to-blue-500/10 border-green-500/20">
                   <CardContent className="p-4">
                     <div className="text-center space-y-3">
@@ -669,7 +700,7 @@ export default function UserChatPage() {
                         You've earned enough points to start a video call
                       </p>
                       <Button 
-                        onClick={() => setShowVideoCall(true)}
+                        onClick={() => router.push(`/video-call/${matchId}`)}
                         className="w-full bg-green-600 hover:bg-green-700 text-white"
                         size="sm"
                       >
@@ -803,31 +834,7 @@ export default function UserChatPage() {
         </Dialog>
       )}
 
-      {/* Video Call Modal */}
-      {match?.matched_user && user && (
-        <VideoCallModal
-          isOpen={showVideoCall}
-          onClose={() => setShowVideoCall(false)}
-          matchId={matchId}
-          userId={user.id}
-          remoteUserId={match.matched_user.id}
-          remoteUserName={match.matched_user.full_name}
-        />
-      )}
-
-      {/* Incoming Call Modal */}
-      {incomingCall && match?.matched_user && user && (
-        <VideoCallModal
-          isOpen={true}
-          onClose={() => setIncomingCall(null)}
-          matchId={matchId}
-          userId={user.id}
-          remoteUserId={incomingCall.fromUserId}
-          remoteUserName={match.matched_user.full_name}
-          isIncoming={true}
-          incomingOffer={incomingCall.offer}
-        />
-      )}
+      {/* Video call now uses separate page - no modal needed */}
     </div>
   );
 }
