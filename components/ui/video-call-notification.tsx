@@ -72,8 +72,8 @@ export function VideoCallNotification({ isVisible, onClose, fromUserId, matchId 
     
     // Small delay to ensure state is set before navigation
     setTimeout(() => {
-      // Navigate to video call page - it will automatically answer the incoming call
-      router.push(`/video-call/${matchId}`);
+      // Navigate to video call page with incoming flag
+      router.push(`/video-call/${matchId}?incoming=true`);
     }, 100);
   };
 

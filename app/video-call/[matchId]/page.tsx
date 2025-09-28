@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, Loader2, ArrowLeft } from 'lucide-react';
@@ -18,9 +18,12 @@ const formatDuration = (seconds: number) => {
 export default function VideoCallPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const matchId = params.matchId as string;
   const { user } = useAuth();
   const supabase = createClient();
+  
+  const isIncomingCall = searchParams.get('incoming') === 'true';
 
   const [match, setMatch] = useState<any>(null);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
@@ -43,7 +46,7 @@ export default function VideoCallPage() {
   } = useWebRTC({
     matchId,
     userId: user?.id || '',
-    autoAnswerIncoming: true, // Auto-answer when user navigates to video call page
+    autoAnswerIncoming: isIncomingCall, // Only auto-answer if this is an incoming call
     onCallEnded: () => {
       router.push(`/user-chat/${matchId}`);
     },
@@ -142,53 +145,23 @@ export default function VideoCallPage() {
 
   // Auto-start call when page loads or answer incoming call
   useEffect(() => {
-    console.log('📞 Video call page state check:', {
-      isConnecting: callState.isConnecting,
-      isConnected: callState.isConnected,
-      isIncoming: callState.isIncoming,
-      isAnswering: callState.isAnswering,
-      isCaller: callState.isCaller,
-      hasMatch: !!match,
-      hasUser: !!user?.id
-    });
-
     if (match && user?.id && !callState.isConnecting && !callState.isConnected) {
       // Only start a new call if we're not answering an incoming call
       if (!callState.isIncoming && !callState.isAnswering && !callState.isCaller) {
-        console.log('📞 ✅ Starting outgoing call - user is the caller');
-        console.log('📞 ✅ Will set isCaller to true and send ONE offer');
         startCall(match.matched_user.id);
         
         const timeout = setTimeout(() => {
-          console.log('📞 ⏰ Call timeout reached (30s) - ending call');
           handleEndCall();
         }, 30000);
         
         setCallTimeout(timeout);
-      } else {
-        console.log('📞 ✅ Answering incoming call or already answering - NOT starting new call');
-        console.log('📞 ✅ User will find and answer pending offer instead');
       }
-    } else {
-      console.log('📞 ⏸️ Skipping call logic - conditions not met:', {
-        hasMatch: !!match,
-        hasUser: !!user?.id,
-        isConnecting: callState.isConnecting,
-        isConnected: callState.isConnected
-      });
     }
   }, [match, user?.id, callState.isConnecting, callState.isConnected, callState.isIncoming, callState.isAnswering, callState.isCaller, startCall]);
 
   // Clear timeout when call connects or ends
   useEffect(() => {
-    if (callState.isConnected) {
-      console.log('📞 ✅ Call connected - clearing timeout');
-      if (callTimeout) {
-        clearTimeout(callTimeout);
-        setCallTimeout(null);
-      }
-    } else if (!match) {
-      console.log('📞 ⚠️ No match - clearing timeout');
+    if (callState.isConnected || !match) {
       if (callTimeout) {
         clearTimeout(callTimeout);
         setCallTimeout(null);
@@ -199,42 +172,22 @@ export default function VideoCallPage() {
   // Ensure video elements are properly connected to streams (backup to WebRTC hook)
   useEffect(() => {
     if (localVideoRef.current && callState.localStream && localVideoRef.current.srcObject !== callState.localStream) {
-      console.log('🎥 Backup: Setting local video stream in page effect');
       localVideoRef.current.srcObject = callState.localStream;
     }
   }, [callState.localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && callState.remoteStream && remoteVideoRef.current.srcObject !== callState.remoteStream) {
-      console.log('🎥 Backup: Setting remote video stream in page effect');
       remoteVideoRef.current.srcObject = callState.remoteStream;
     }
   }, [callState.remoteStream]);
 
   const handleEndCall = () => {
-    console.log('🛑 handleEndCall called - reason: user action or timeout');
-    console.log('🛑 Current call state:', {
-      isConnected: callState.isConnected,
-      isConnecting: callState.isConnecting,
-      isCaller: callState.isCaller,
-      hasTimeout: !!callTimeout
-    });
-    
-    // Check current stream status before calling endCall
-    if (callState.localStream) {
-      console.log('🛑 Current stream tracks before endCall:', 
-        callState.localStream.getTracks().map(track => `${track.kind}: ${track.readyState}`));
-    }
-    
     endCall();
-    
     if (callTimeout) {
-      console.log('🛑 Clearing timeout in handleEndCall');
       clearTimeout(callTimeout);
       setCallTimeout(null);
     }
-    
-    console.log('🛑 Navigating back to chat');
     router.push(`/user-chat/${matchId}`);
   };
 

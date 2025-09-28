@@ -233,16 +233,8 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
   // Start a video call
   const startCall = async (remoteUserId: string) => {
     try {
-      console.log('📞 Starting call to:', remoteUserId, 'Current state:', {
-        isConnecting: callState.isConnecting,
-        isIncoming: callState.isIncoming,
-        isAnswering: callState.isAnswering,
-        isCaller: callState.isCaller
-      });
-
       // Prevent starting call if already in progress or answering
       if (callState.isConnecting || callState.isIncoming || callState.isAnswering) {
-        console.log('📞 Call already in progress, skipping start call');
         return;
       }
 
@@ -255,7 +247,6 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
         isCaller: true,
         error: undefined 
       }));
-      console.log('📞 Set isCaller to true - user is the caller');
 
       const stream = await getUserMedia();
       if (!stream) return;
@@ -297,7 +288,6 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
         isCaller: false,
         error: undefined 
       }));
-      console.log('📞 Set isCaller to false - user is answering');
 
       const stream = await getUserMedia();
       if (!stream) return;
@@ -328,19 +318,10 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
     }
   };
 
-  // Check for pending offers when component mounts - run immediately
+  // Check for pending offers when component mounts - only if autoAnswerIncoming
   useEffect(() => {
     const checkPendingOffers = async () => {
       if (autoAnswerIncoming) {
-        console.log('📞 🚀 IMMEDIATE: Checking for pending offers with autoAnswerIncoming:', autoAnswerIncoming);
-        console.log('📞 🚀 Current state before check:', {
-          isConnected: callState.isConnected,
-          isConnecting: callState.isConnecting,
-          isIncoming: callState.isIncoming,
-          isAnswering: callState.isAnswering,
-          isCaller: callState.isCaller
-        });
-        
         try {
           const { data: pendingOffers } = await supabase
             .from('video_call_signals')
@@ -352,15 +333,10 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
             .order('created_at', { ascending: false })
             .limit(1);
 
-          console.log('📞 🚀 Pending offers found:', pendingOffers?.length || 0);
-
           if (pendingOffers && pendingOffers.length > 0) {
             const offer = pendingOffers[0];
-            console.log('📞 🚀 Found pending offer on mount:', offer.id, 'from:', offer.from_user_id);
-            console.log('📞 🚀 Offer created at:', offer.created_at);
             
             if (!callState.isConnected && !callState.isConnecting) {
-              console.log('📞 🚀 PROCESSING pending offer - setting answerer state IMMEDIATELY');
               setCallState(prev => ({ 
                 ...prev, 
                 isIncoming: true,
@@ -376,21 +352,14 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
                 .eq('id', offer.id);
               
               answerCall(offer.signal_data.offer, offer.from_user_id);
-            } else {
-              console.log('📞 🚀 Skipping pending offer - already in call state');
             }
-          } else {
-            console.log('📞 🚀 No pending offers found - user will start new call');
           }
         } catch (error) {
-          console.error('📞 🚀 Error checking pending offers:', error);
+          console.error('Error checking pending offers:', error);
         }
-      } else {
-        console.log('📞 🚀 Not checking pending offers - autoAnswerIncoming is false');
       }
     };
 
-    // Run immediately, no delay
     checkPendingOffers();
   }, [matchId, userId, autoAnswerIncoming, supabase]);
 
