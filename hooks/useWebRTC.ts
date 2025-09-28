@@ -66,52 +66,44 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
 
   // End the call
   const endCall = useCallback(async () => {
-    console.log('🛑 Ending call - starting cleanup');
     const currentRemoteUserId = callState.remoteUserId;
     const currentLocalStream = callState.localStream;
     
     // Send end-call signal to remote user if we have their ID
     if (currentRemoteUserId) {
       try {
-        console.log('🛑 Sending end-call signal to:', currentRemoteUserId);
         await sendSignalingMessage({
           type: 'end-call',
           from: userId,
           to: currentRemoteUserId,
         });
       } catch (error) {
-        console.error('Error sending end-call signal:', error);
+        // Ignore signaling errors during cleanup
       }
     }
     
     // Close peer connection
     if (peerConnectionRef.current) {
-      console.log('🛑 Closing peer connection');
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
 
     // Stop local stream tracks
     if (currentLocalStream) {
-      console.log('🛑 Stopping local stream tracks:', currentLocalStream.getTracks().length);
-      currentLocalStream.getTracks().forEach((track, index) => {
-        console.log(`🛑 Stopping ${track.kind} track ${index}`);
+      currentLocalStream.getTracks().forEach((track) => {
         track.stop();
       });
     }
 
     // Clear video refs
     if (localVideoRef.current) {
-      console.log('🛑 Clearing local video element');
       localVideoRef.current.srcObject = null;
     }
     if (remoteVideoRef.current) {
-      console.log('🛑 Clearing remote video element');
       remoteVideoRef.current.srcObject = null;
     }
 
     // Reset state
-    console.log('🛑 Resetting call state');
     setCallState({
       isConnected: false,
       isConnecting: false,
@@ -123,7 +115,6 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
     });
 
     // Notify parent component
-    console.log('🛑 Call cleanup complete');
     onCallEnded?.();
   }, [callState.remoteUserId, callState.localStream, userId, onCallEnded, sendSignalingMessage]);
 
@@ -139,7 +130,6 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
     // Handle remote stream
     pc.ontrack = (event) => {
       const [remoteStream] = event.streams;
-      console.log('🎥 Received remote stream:', remoteStream, 'tracks:', remoteStream.getTracks());
       setCallState(prev => ({ ...prev, remoteStream }));
       
       if (remoteVideoRef.current) {
@@ -187,12 +177,10 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
     try {
       // If we already have a stream and it's active, return it
       if (callState.localStream && callState.localStream.active) {
-        console.log('🎥 Reusing existing active local stream');
         return callState.localStream;
       }
 
       if (callState.localStream) {
-        console.log('🎥 Stopping inactive local stream');
         callState.localStream.getTracks().forEach(track => track.stop());
       }
       
@@ -208,7 +196,6 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
         }
       });
 
-      console.log('🎥 Created local stream:', stream, 'tracks:', stream.getTracks());
       setCallState(prev => ({ ...prev, localStream: stream }));
       
       if (localVideoRef.current) {
@@ -381,13 +368,11 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
           if (signal.from_user_id === userId) return;
 
           const data = signal.signal_data;
-          console.log('📞 Processing signal:', data.type, 'from:', signal.from_user_id);
 
           switch (data.type) {
             case 'offer':
               // Ignore offers if we're already connected or connecting
               if (callState.isConnected || callState.isConnecting) {
-                console.log('📞 Ignoring offer - already in call state');
                 return;
               }
 
@@ -403,7 +388,6 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
 
               if (autoAnswerIncoming) {
                 // When auto-answering, set isAnswering immediately
-                console.log('📞 Auto-answering incoming call');
                 setCallState(prev => ({ 
                   ...prev, 
                   isIncoming: true,
@@ -413,7 +397,6 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
                 }));
                 answerCall(data.offer, signal.from_user_id);
               } else {
-                console.log('📞 Showing incoming call popup');
                 setCallState(prev => ({ 
                   ...prev, 
                   isIncoming: true,
