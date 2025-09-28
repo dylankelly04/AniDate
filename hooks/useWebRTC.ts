@@ -320,6 +320,44 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
     }
   };
 
+  // Check for pending offers when component mounts
+  useEffect(() => {
+    const checkPendingOffers = async () => {
+      if (autoAnswerIncoming) {
+        try {
+          const { data: pendingOffers } = await supabase
+            .from('video_call_signals')
+            .select('*')
+            .eq('match_id', matchId)
+            .eq('to_user_id', userId)
+            .eq('signal_type', 'offer')
+            .is('processed_at', null)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          if (pendingOffers && pendingOffers.length > 0) {
+            const offer = pendingOffers[0];
+            console.log('📞 Found pending offer on mount:', offer.id);
+            
+            if (!callState.isConnected && !callState.isConnecting) {
+              setCallState(prev => ({ 
+                ...prev, 
+                isIncoming: true,
+                isAnswering: true,
+                remoteUserId: offer.from_user_id 
+              }));
+              answerCall(offer.signal_data.offer, offer.from_user_id);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking pending offers:', error);
+        }
+      }
+    };
+
+    checkPendingOffers();
+  }, [matchId, userId, autoAnswerIncoming, callState.isConnected, callState.isConnecting, answerCall]);
+
   // Listen for signaling messages
   useEffect(() => {
     const channel = supabase
@@ -346,6 +384,16 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
               if (callState.isConnected || callState.isConnecting) {
                 console.log('📞 Ignoring offer - already in call state');
                 return;
+              }
+
+              // Mark this signal as processed to prevent duplicate handling
+              try {
+                await supabase
+                  .from('video_call_signals')
+                  .update({ processed_at: new Date().toISOString() })
+                  .eq('id', signal.id);
+              } catch (error) {
+                console.error('Error marking signal as processed:', error);
               }
 
               if (autoAnswerIncoming) {

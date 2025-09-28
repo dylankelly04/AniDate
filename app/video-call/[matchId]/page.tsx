@@ -163,7 +163,7 @@ export default function VideoCallPage() {
         
         setCallTimeout(timeout);
       } else {
-        console.log('📞 Answering incoming call or already answering');
+        console.log('📞 Answering incoming call or already answering - NOT starting new call');
       }
     }
   }, [match, user?.id, callState.isConnecting, callState.isConnected, callState.isIncoming, callState.isAnswering, startCall]);
