@@ -178,33 +178,37 @@ export default function VideoCallPage() {
     }
   }, [callState.isConnected, match, callTimeout]);
 
-  // Ensure video elements are properly connected to streams
+  // Ensure video elements are properly connected to streams (backup to WebRTC hook)
   useEffect(() => {
-    if (localVideoRef.current && callState.localStream) {
-      console.log('🎥 Setting local video stream:', callState.localStream);
+    if (localVideoRef.current && callState.localStream && localVideoRef.current.srcObject !== callState.localStream) {
+      console.log('🎥 Backup: Setting local video stream in page effect');
       localVideoRef.current.srcObject = callState.localStream;
-      localVideoRef.current.play().catch((error) => {
-        console.error('Error playing local video in effect:', error);
-      });
     }
   }, [callState.localStream]);
 
   useEffect(() => {
-    if (remoteVideoRef.current && callState.remoteStream) {
-      console.log('🎥 Setting remote video stream:', callState.remoteStream);
+    if (remoteVideoRef.current && callState.remoteStream && remoteVideoRef.current.srcObject !== callState.remoteStream) {
+      console.log('🎥 Backup: Setting remote video stream in page effect');
       remoteVideoRef.current.srcObject = callState.remoteStream;
-      remoteVideoRef.current.play().catch((error) => {
-        console.error('Error playing remote video in effect:', error);
-      });
     }
   }, [callState.remoteStream]);
 
   const handleEndCall = () => {
+    console.log('🛑 User clicked End Call button');
+    
+    // Check current stream status before calling endCall
+    if (callState.localStream) {
+      console.log('🛑 Current stream tracks before endCall:', 
+        callState.localStream.getTracks().map(track => `${track.kind}: ${track.readyState}`));
+    }
+    
     endCall();
+    
     if (callTimeout) {
       clearTimeout(callTimeout);
       setCallTimeout(null);
     }
+    
     router.push(`/user-chat/${matchId}`);
   };
 
