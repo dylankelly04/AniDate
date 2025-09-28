@@ -319,15 +319,21 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
 
           switch (data.type) {
             case 'offer':
-              setCallState(prev => ({ 
-                ...prev, 
-                isIncoming: true, 
-                remoteUserId: signal.from_user_id 
-              }));
-              
               if (autoAnswerIncoming) {
+                // When auto-answering, set isAnswering immediately
+                setCallState(prev => ({ 
+                  ...prev, 
+                  isIncoming: true,
+                  isAnswering: true,
+                  remoteUserId: signal.from_user_id 
+                }));
                 answerCall(data.offer, signal.from_user_id);
               } else {
+                setCallState(prev => ({ 
+                  ...prev, 
+                  isIncoming: true, 
+                  remoteUserId: signal.from_user_id 
+                }));
                 onIncomingCall?.(signal.from_user_id);
               }
               break;

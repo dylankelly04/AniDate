@@ -70,8 +70,11 @@ export function VideoCallNotification({ isVisible, onClose, fromUserId, matchId 
     // Close the popup first, then navigate
     onClose();
     
-    // Navigate to video call page - it will automatically answer the incoming call
-    router.push(`/video-call/${matchId}`);
+    // Small delay to ensure state is set before navigation
+    setTimeout(() => {
+      // Navigate to video call page - it will automatically answer the incoming call
+      router.push(`/video-call/${matchId}`);
+    }, 100);
   };
 
   const handleDeclineCall = async () => {

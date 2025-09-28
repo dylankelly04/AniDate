@@ -142,9 +142,19 @@ export default function VideoCallPage() {
 
   // Auto-start call when page loads or answer incoming call
   useEffect(() => {
+    console.log('📞 Video call page state check:', {
+      isConnecting: callState.isConnecting,
+      isConnected: callState.isConnected,
+      isIncoming: callState.isIncoming,
+      isAnswering: callState.isAnswering,
+      hasMatch: !!match,
+      hasUser: !!user?.id
+    });
+
     if (match && user?.id && !callState.isConnecting && !callState.isConnected) {
       // Only start a new call if we're not answering an incoming call
       if (!callState.isIncoming && !callState.isAnswering) {
+        console.log('📞 Starting outgoing call');
         startCall(match.matched_user.id);
         
         const timeout = setTimeout(() => {
@@ -152,6 +162,8 @@ export default function VideoCallPage() {
         }, 30000);
         
         setCallTimeout(timeout);
+      } else {
+        console.log('📞 Answering incoming call or already answering');
       }
     }
   }, [match, user?.id, callState.isConnecting, callState.isConnected, callState.isIncoming, callState.isAnswering, startCall]);
