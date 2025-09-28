@@ -49,37 +49,83 @@ export default function IncomingVideoCallPage() {
       if (!user?.id) return;
 
       try {
-        const { data: matches, error } = await supabase
-          .from('user_matches')
-          .select(`
+        // Get the match details using the same logic as chat page
+        const { data: matchData, error: matchError } = await supabase
+          .from("matches")
+          .select(
+            `
             *,
-            matched_user:profiles!user_matches_user2_id_fkey(*)
-          `)
-          .eq('user1_id', user.id)
-          .eq('match_id', matchId)
-          .eq('status', 'accepted')
+            matched_user:profiles!matches_user2_id_fkey(
+              id,
+              full_name,
+              avatar_url,
+              original_avatar_url,
+              anime_avatar_url,
+              age,
+              bio,
+              location,
+              interests,
+              college,
+              instagram_handle,
+              twitter_handle,
+              tiktok_handle,
+              discord_username,
+              snapchat_username,
+              relationship_status,
+              occupation,
+              height_ft,
+              height_in,
+              zodiac_sign
+            )
+          `
+          )
+          .eq("id", matchId)
+          .eq("status", "accepted")
           .single();
 
-        if (error) {
-          // Try the reverse relationship
-          const { data: reverseMatches, error: reverseError } = await supabase
-            .from('user_matches')
-            .select(`
-              *,
-              matched_user:profiles!user_matches_user1_id_fkey(*)
-            `)
-            .eq('user2_id', user.id)
-            .eq('match_id', matchId)
-            .eq('status', 'accepted')
+        if (matchError || !matchData) {
+          throw new Error("Match not found or not accepted");
+        }
+
+        // If user is user2, get user1's profile instead
+        let matchedUser = matchData.matched_user;
+        if (matchData.user2_id === user?.id) {
+          const { data: user1Profile, error: profileError } = await supabase
+            .from("profiles")
+            .select(
+              `
+              id,
+              full_name,
+              avatar_url,
+              original_avatar_url,
+              anime_avatar_url,
+              age,
+              bio,
+              location,
+              interests,
+              college,
+              instagram_handle,
+              twitter_handle,
+              tiktok_handle,
+              discord_username,
+              snapchat_username,
+              relationship_status,
+              occupation,
+              height_ft,
+              height_in,
+              zodiac_sign
+            `
+            )
+            .eq("id", matchData.user1_id)
             .single();
 
-          if (reverseError) {
-            throw new Error('Match not found');
+          if (profileError || !user1Profile) {
+            throw new Error("Could not fetch matched user profile");
           }
-          setMatch(reverseMatches);
-        } else {
-          setMatch(matches);
+          matchedUser = user1Profile;
         }
+
+        setMatch({ ...matchData, matched_user: matchedUser });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load match');
       } finally {
