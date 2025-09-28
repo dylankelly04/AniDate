@@ -143,7 +143,8 @@ export default function VideoCallPage() {
   // Auto-start call when page loads or answer incoming call
   useEffect(() => {
     if (match && user?.id && !callState.isConnecting && !callState.isConnected) {
-      if (!callState.isIncoming) {
+      // Only start a new call if we're not answering an incoming call
+      if (!callState.isIncoming && !callState.isAnswering) {
         startCall(match.matched_user.id);
         
         const timeout = setTimeout(() => {
@@ -153,7 +154,7 @@ export default function VideoCallPage() {
         setCallTimeout(timeout);
       }
     }
-  }, [match, user?.id, callState.isConnecting, callState.isConnected, callState.isIncoming, startCall]);
+  }, [match, user?.id, callState.isConnecting, callState.isConnected, callState.isIncoming, callState.isAnswering, startCall]);
 
   // Clear timeout when call connects or ends
   useEffect(() => {
@@ -253,7 +254,7 @@ export default function VideoCallPage() {
             <div className="flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span className="text-sm">
-                {callState.isIncoming ? 'Joining call...' : 'Calling... waiting for answer'}
+                {callState.isAnswering ? 'Joining call...' : 'Calling... waiting for answer'}
               </span>
             </div>
           )}

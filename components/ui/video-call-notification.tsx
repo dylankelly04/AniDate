@@ -67,6 +67,9 @@ export function VideoCallNotification({ isVisible, onClose, fromUserId, matchId 
       console.error('Error sending call accepted signal:', error);
     }
     
+    // Close the popup first, then navigate
+    onClose();
+    
     // Navigate to video call page - it will automatically answer the incoming call
     router.push(`/video-call/${matchId}`);
   };

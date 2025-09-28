@@ -15,6 +15,7 @@ export interface CallState {
   isConnected: boolean;
   isConnecting: boolean;
   isIncoming: boolean;
+  isAnswering: boolean; // New state to track if we're answering a call
   remoteUserId?: string;
   localStream?: MediaStream;
   remoteStream?: MediaStream;
@@ -26,6 +27,7 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
     isConnected: false,
     isConnecting: false,
     isIncoming: false,
+    isAnswering: false,
   });
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -104,6 +106,7 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
       isConnected: false,
       isConnecting: false,
       isIncoming: false,
+      isAnswering: false,
       localStream: undefined,
       remoteStream: undefined,
     });
@@ -245,6 +248,7 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
         isConnecting: true, 
         remoteUserId: fromUserId,
         isIncoming: false,
+        isAnswering: true,
         error: undefined 
       }));
 
