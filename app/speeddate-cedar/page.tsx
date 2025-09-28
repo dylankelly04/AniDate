@@ -18,6 +18,7 @@ import {
   AlertCircle,
   CheckCircle,
   Bot,
+  ArrowLeft,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { createClient } from "@/lib/supabase/client";
@@ -391,6 +392,17 @@ export default function SpeeddateCedarPage() {
     >
       <div className="container mx-auto p-6 max-w-6xl">
         <div className="mb-8">
+          <div className="flex items-center gap-4 mb-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => (window.location.href = "/homescreen")}
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Home
+            </Button>
+          </div>
           <h1 className="text-3xl font-bold mb-2">
             🚀 Cedar-OS Speeddate Agent
           </h1>
@@ -401,12 +413,10 @@ export default function SpeeddateCedarPage() {
         </div>
 
         <Tabs defaultValue="dashboard" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="matches">Matches</TabsTrigger>
             <TabsTrigger value="actions">Recent Actions</TabsTrigger>
-            <TabsTrigger value="chat">AI Chat</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-6">
@@ -475,22 +485,7 @@ export default function SpeeddateCedarPage() {
             </Card>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-2">
-                    <Heart className="w-5 h-5 text-red-500" />
-                    <div>
-                      <p className="text-2xl font-bold">
-                        {agentStats.total_swipes}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Total Swipes
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center gap-2">
@@ -524,13 +519,13 @@ export default function SpeeddateCedarPage() {
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5 text-yellow-500" />
+                    <Heart className="w-5 h-5 text-gray-400" />
                     <div>
-                      <p className="text-2xl font-bold">
-                        {agentStats.waiting_for_user}
+                      <p className="text-lg font-bold text-gray-400">
+                        Coming Soon
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Waiting for You
+                        Auto Swiping
                       </p>
                     </div>
                   </div>
@@ -538,36 +533,52 @@ export default function SpeeddateCedarPage() {
               </Card>
             </div>
 
-            {/* Agent Preferences */}
+            {/* Agentic Dating Instructions */}
             <Card>
               <CardHeader>
-                <CardTitle>Agent Preferences</CardTitle>
+                <CardTitle>Agentic Dating Instructions</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   <div>
-                    <h4 className="font-medium mb-2">Matching Criteria</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {userPreferences?.interests?.map((interest: string) => (
-                        <Badge key={interest} variant="outline">
-                          {interest}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <h4 className="font-medium mb-2">Relationship Type</h4>
-                    <Badge variant="secondary">
-                      {userPreferences?.relationship_type}
-                    </Badge>
-                  </div>
-                  <div>
-                    <h4 className="font-medium mb-2">Agent Behavior</h4>
-                    <p className="text-sm text-muted-foreground">
-                      The agent will swipe right on users with matching
-                      interests and send casual conversation starters. It will
-                      wait for your input on important decisions like expressing
-                      serious interest or answering personal questions.
+                    <label
+                      htmlFor="dating-instructions"
+                      className="block text-sm font-medium mb-2"
+                    >
+                      Custom Dating Instructions
+                    </label>
+                    <textarea
+                      id="dating-instructions"
+                      className="w-full min-h-[120px] p-3 border border-gray-300 rounded-md resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Enter custom instructions for how you want your AI agent to behave when texting matches. For example: 'Be flirty but respectful', 'Ask about their hobbies', 'Keep conversations light and fun', etc."
+                      value={userPreferences?.agentic_dating_instructions || ""}
+                      onChange={async (e) => {
+                        const newInstructions = e.target.value;
+                        setUserPreferences((prev: any) => ({
+                          ...prev,
+                          agentic_dating_instructions: newInstructions,
+                        }));
+
+                        // Save to database
+                        try {
+                          const supabase = createClient();
+                          await supabase
+                            .from("profiles")
+                            .update({
+                              agentic_dating_instructions: newInstructions,
+                            })
+                            .eq("id", user?.id);
+                        } catch (error) {
+                          console.error(
+                            "Error saving dating instructions:",
+                            error
+                          );
+                        }
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground mt-2">
+                      These instructions will be used by the AI when generating
+                      responses to your matches.
                     </p>
                   </div>
                 </div>
@@ -729,65 +740,6 @@ export default function SpeeddateCedarPage() {
                     ))}
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="chat" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>AI Agent Chat</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-96 border rounded-lg p-4">
-                  <p className="text-center text-muted-foreground">
-                    Chat with your AI dating agent to get insights, ask
-                    questions, or get help with your dating strategy.
-                  </p>
-                  <div className="mt-4">
-                    <FloatingCedarChat />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="settings" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Agent Settings</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-medium mb-2">Message Frequency</h4>
-                    <p className="text-sm text-muted-foreground">
-                      How often the agent should send messages to matches
-                    </p>
-                    <div className="mt-2">
-                      <Badge variant="outline">Every 2-4 hours</Badge>
-                    </div>
-                  </div>
-                  <div>
-                    <h4 className="font-medium mb-2">Swipe Strategy</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Agent will swipe right on users with at least one matching
-                      interest
-                    </p>
-                  </div>
-                  <div>
-                    <h4 className="font-medium mb-2">Wait for User</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Agent will pause and wait for your input when:
-                    </p>
-                    <ul className="text-sm text-muted-foreground mt-2 ml-4 list-disc">
-                      <li>Expressing serious romantic interest</li>
-                      <li>Answering personal questions about values/goals</li>
-                      <li>Making plans to meet in person</li>
-                      <li>Any question the AI is uncertain about</li>
-                    </ul>
-                  </div>
-                </div>
               </CardContent>
             </Card>
           </TabsContent>

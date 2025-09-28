@@ -591,6 +591,8 @@ async function generateContextualResponse(
     console.log(`🤖 [OPENAI] Input message: "${theirMessage}"`);
     console.log(`🤖 [OPENAI] Other user: ${otherUser.full_name}`);
 
+    const customInstructions = preferences.agentic_dating_instructions || "";
+
     const prompt = `Generate a natural, engaging response to this message from a dating app match.
 
 Their message: "${theirMessage}"
@@ -604,6 +606,14 @@ Their profile:
 - Interests: ${otherUser.interests?.join(", ") || "Not specified"}
 - Bio: ${otherUser.bio || "No bio"}
 
+${
+  customInstructions
+    ? `CUSTOM DATING INSTRUCTIONS: ${customInstructions}
+
+Follow these specific instructions when crafting your response:`
+    : ""
+}
+
 Generate a response that:
 1. Directly addresses what they said
 2. Shows genuine interest and engagement
@@ -611,6 +621,11 @@ Generate a response that:
 4. Is natural and conversational (not robotic)
 5. Keeps it under 100 characters
 6. Matches the tone of their message
+${
+  customInstructions
+    ? "7. Follows the custom dating instructions provided above"
+    : ""
+}
 
 Examples:
 - If they ask "How's your day?" → "Great! Just finished [activity]. How about yours?"
