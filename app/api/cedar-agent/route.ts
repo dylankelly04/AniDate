@@ -63,6 +63,17 @@ export async function POST(request: NextRequest) {
         const suggestions = await agent.getConversationSuggestions(matchId);
         return NextResponse.json({ suggestions });
 
+      case "read_and_respond":
+        const { matchId: respondMatchId } = await request.json();
+        if (!respondMatchId) {
+          return NextResponse.json(
+            { error: "Match ID is required for read_and_respond action" },
+            { status: 400 }
+          );
+        }
+        const matchResponse = await agent.readAndRespondToMatch(respondMatchId);
+        return NextResponse.json(matchResponse);
+
       case "chat":
         if (!message) {
           return NextResponse.json(

@@ -110,6 +110,8 @@ export default function SpeeddateCedarPage() {
 
       if (data) {
         setUserPreferences(data);
+        // Set agent state from database
+        setIsActive(data.agent_active || false);
       }
     } catch (error) {
       console.error("Error loading preferences:", error);
@@ -127,11 +129,12 @@ export default function SpeeddateCedarPage() {
         .eq("user_id", user?.id)
         .eq("type", "swipe");
 
-      // Get matches made
+      // Get matches made (only accepted matches)
       const { count: matchCount } = await supabase
         .from("matches")
         .select("*", { count: "exact", head: true })
-        .or(`user1_id.eq.${user?.id},user2_id.eq.${user?.id}`);
+        .or(`user1_id.eq.${user?.id},user2_id.eq.${user?.id}`)
+        .eq("status", "accepted");
 
       // Get messages sent
       const { count: messageCount } = await supabase
@@ -261,62 +264,86 @@ export default function SpeeddateCedarPage() {
   const toggleAgent = async () => {
     if (isActive) {
       // Stop agent
-      setIsActive(false);
+      try {
+        const response = await fetch("/api/agent/stop", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId: user?.id,
+          }),
+        });
+
+        if (response.ok) {
+          setIsActive(false);
+          console.log("Agent stopped successfully");
+        } else {
+          console.error("Failed to stop agent");
+        }
+      } catch (error) {
+        console.error("Error stopping agent:", error);
+      }
     } else {
       // Start agent
-      setIsActive(true);
-      await startAgent();
-    }
-  };
+      try {
+        const response = await fetch("/api/agent/start", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId: user?.id,
+            preferences: userPreferences,
+          }),
+        });
 
-  const startAgent = async () => {
-    try {
-      const response = await fetch("/api/agent/start", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId: user?.id,
-          preferences: userPreferences,
-        }),
-      });
-
-      if (response.ok) {
-        // Start polling for updates and running the agent
-        const interval = setInterval(async () => {
-          if (!isActive) {
-            clearInterval(interval);
-            return;
-          }
-
-          // Run the agent to send messages
-          try {
-            await fetch("/api/agent/run", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                userId: user?.id,
-              }),
-            });
-          } catch (error) {
-            console.error("Error running agent:", error);
-          }
-
-          // Update the UI
-          await loadAgentStats();
-          await loadRecentActions();
-          await loadAgentMatches();
-        }, 10000); // Run every 10 seconds
-
-        return () => clearInterval(interval);
+        if (response.ok) {
+          setIsActive(true);
+          console.log("Agent started successfully");
+        } else {
+          console.error("Failed to start agent");
+        }
+      } catch (error) {
+        console.error("Error starting agent:", error);
       }
-    } catch (error) {
-      console.error("Error starting agent:", error);
     }
   };
+
+  // Start polling for updates when agent is active
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    if (isActive) {
+      interval = setInterval(async () => {
+        // Run the agent to send messages
+        try {
+          await fetch("/api/agent/run", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userId: user?.id,
+            }),
+          });
+        } catch (error) {
+          console.error("Error running agent:", error);
+        }
+
+        // Update the UI
+        await loadAgentStats();
+        await loadRecentActions();
+        await loadAgentMatches();
+      }, 10000); // Run every 10 seconds
+    }
+
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [isActive, user?.id]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -599,10 +626,7 @@ export default function SpeeddateCedarPage() {
                                   {match.matched_user?.full_name}
                                 </h4>
                                 {match.waiting_for_user && (
-                                  <AlertCircle
-                                    className="w-4 h-4 text-yellow-500"
-                                    title="Waiting for your input"
-                                  />
+                                  <AlertCircle className="w-4 h-4 text-yellow-500" />
                                 )}
                               </div>
                               <p className="text-sm text-muted-foreground">

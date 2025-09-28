@@ -9,14 +9,21 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
+    console.log(
+      `🚀 [AGENT RUN] Agent run endpoint called at ${new Date().toISOString()}`
+    );
+
     const { userId } = await request.json();
 
     if (!userId) {
+      console.error("❌ [AGENT RUN] No user ID provided");
       return NextResponse.json(
         { error: "User ID is required" },
         { status: 400 }
       );
     }
+
+    console.log(`👤 [AGENT RUN] Processing agent run for user: ${userId}`);
 
     // Use service role client for server-side operations
     const supabase = createServiceClient(
@@ -24,25 +31,38 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Check if agent is active for this user
-    const { data: activeAgent } = await supabase
-      .from("agent_actions")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("status", "completed")
-      .order("created_at", { ascending: false })
-      .limit(1)
+    // Check if agent is active for this user in the database
+    const { data: userProfile, error: profileError } = await supabase
+      .from("profiles")
+      .select("agent_active")
+      .eq("id", userId)
       .single();
 
-    if (!activeAgent) {
+    if (profileError) {
+      console.error("❌ [AGENT RUN] Error checking agent state:", profileError);
       return NextResponse.json({
         success: false,
-        message: "No active agent found",
+        message: "Error checking agent state",
+      });
+    }
+
+    console.log(
+      `🔍 [AGENT RUN] Agent state check:`,
+      userProfile?.agent_active ? "Agent is active" : "Agent is inactive"
+    );
+
+    if (!userProfile?.agent_active) {
+      console.log(`❌ [AGENT RUN] Agent is not active for user ${userId}`);
+      return NextResponse.json({
+        success: false,
+        message: "Agent is not active",
       });
     }
 
     // Process existing matches to send messages
+    console.log(`🔄 [AGENT RUN] Starting to process existing matches...`);
     await processExistingMatches(userId, supabase);
+    console.log(`✅ [AGENT RUN] Finished processing existing matches`);
 
     return NextResponse.json({
       success: true,
@@ -56,6 +76,10 @@ export async function POST(request: NextRequest) {
 
 async function processExistingMatches(userId: string, supabase: any) {
   try {
+    console.log(
+      `🔍 [AGENT RUN] Starting processExistingMatches for user: ${userId}`
+    );
+
     // Get user preferences
     const { data: preferences } = await supabase
       .from("profiles")
@@ -64,9 +88,14 @@ async function processExistingMatches(userId: string, supabase: any) {
       .single();
 
     if (!preferences) {
-      console.error("No user preferences found");
+      console.error("❌ [AGENT RUN] No user preferences found");
       return;
     }
+
+    console.log(`✅ [AGENT RUN] User preferences loaded:`, {
+      interests: preferences.interests,
+      bio: preferences.bio?.substring(0, 50) + "...",
+    });
 
     // Use the EXACT same query as the matches page
     const { data: matches, error: matchesError } = await supabase
@@ -99,44 +128,56 @@ async function processExistingMatches(userId: string, supabase: any) {
       .order("created_at", { ascending: false });
 
     if (matchesError || !matches) {
-      console.error("Error fetching matches:", matchesError);
+      console.error("❌ [AGENT RUN] Error fetching matches:", matchesError);
       return;
     }
 
+    console.log(`📊 [AGENT RUN] Found ${matches.length} matches to process`);
+
     for (const match of matches) {
+      console.log(
+        `🔍 [AGENT RUN] Processing match ${match.id} with user: ${
+          match.user1_id === userId
+            ? match.user2_profile?.full_name
+            : match.user1_profile?.full_name
+        }`
+      );
       const otherUser =
         match.user1_id === userId ? match.user2_profile : match.user1_profile;
 
-      // Check if we've sent a message recently (within last 2 hours)
-      const { data: recentMessage } = await supabase
+      // Always send a message - no time restrictions
+      console.log(
+        `📤 [AGENT RUN] Always sending message to ${otherUser.full_name} (no time restrictions)`
+      );
+
+      // Check if we're already waiting for user input
+      const { data: waitingAction } = await supabase
         .from("agent_actions")
         .select("*")
         .eq("user_id", userId)
         .eq("target_user_id", otherUser.id)
-        .eq("type", "message")
-        .gte(
-          "created_at",
-          new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-        )
+        .eq("status", "waiting_for_user")
         .single();
 
-      if (!recentMessage) {
-        // Check if we're already waiting for user input
-        const { data: waitingAction } = await supabase
-          .from("agent_actions")
-          .select("*")
-          .eq("user_id", userId)
-          .eq("target_user_id", otherUser.id)
-          .eq("status", "waiting_for_user")
-          .single();
+      console.log(
+        `⏳ [AGENT RUN] Waiting action check for ${otherUser.full_name}:`,
+        waitingAction ? "Found waiting action" : "No waiting action"
+      );
 
-        if (!waitingAction) {
-          console.log(
-            `📤 Sending CEDAR TEST message to ${otherUser.full_name}`
-          );
-          // Send simple CEDAR TEST message
-          await sendCedarTestMessage(userId, otherUser, match.id, supabase);
-        }
+      if (!waitingAction) {
+        // Always send a message - no conditions, just send one message per run
+        console.log(`📤 [AGENT RUN] Sending message to ${otherUser.full_name}`);
+        await readAndRespondToChat(
+          userId,
+          otherUser,
+          match.id,
+          preferences,
+          supabase
+        );
+      } else {
+        console.log(
+          `⏳ [AGENT RUN] Skipping ${otherUser.full_name} - waiting for user input`
+        );
       }
     }
   } catch (error) {
@@ -288,6 +329,189 @@ Keep it under 100 characters. Don't be overly flirty or serious.`;
   } catch (error) {
     console.error("Error generating message:", error);
     return null;
+  }
+}
+
+async function readAndRespondToChat(
+  userId: string,
+  otherUser: any,
+  matchId: string,
+  preferences: any,
+  supabase: any
+) {
+  try {
+    console.log(
+      `🔍 [READ_CHAT] Starting readAndRespondToChat for match ${matchId} with ${otherUser.full_name}`
+    );
+
+    // Get the most recent message from the other person
+    const { data: recentMessages, error: messagesError } = await supabase
+      .from("user_messages")
+      .select("*")
+      .eq("match_id", matchId)
+      .eq("sender_id", otherUser.id)
+      .eq("receiver_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (messagesError) {
+      console.error(
+        "❌ [READ_CHAT] Error fetching recent messages:",
+        messagesError
+      );
+      return;
+    }
+
+    console.log(`📨 [READ_CHAT] Recent messages query result:`, {
+      messageCount: recentMessages?.length || 0,
+      latestMessage:
+        recentMessages?.[0]?.content?.substring(0, 100) + "..." || "none",
+    });
+
+    let responseMessage: string;
+
+    if (!recentMessages || recentMessages.length === 0) {
+      // Chat is empty, send greeting
+      responseMessage = "hi, nice to meet you!";
+      console.log(
+        `💬 [READ_CHAT] Chat is empty with ${otherUser.full_name}, sending greeting`
+      );
+    } else {
+      // Generate appropriate response based on their message
+      const theirMessage = recentMessages[0].content;
+      console.log(
+        `💬 [READ_CHAT] Last message from ${otherUser.full_name}: "${theirMessage}"`
+      );
+
+      console.log(`🤖 [READ_CHAT] Calling OpenAI to generate response...`);
+      responseMessage = await generateContextualResponse(
+        theirMessage,
+        otherUser,
+        preferences
+      );
+      console.log(
+        `🤖 [READ_CHAT] OpenAI response generated: "${responseMessage}"`
+      );
+    }
+
+    if (responseMessage) {
+      console.log(`📤 [READ_CHAT] Attempting to send message to database...`);
+
+      // Send the response message
+      const { error: messageError } = await supabase
+        .from("user_messages")
+        .insert({
+          match_id: matchId,
+          sender_id: userId,
+          receiver_id: otherUser.id,
+          content: responseMessage,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        });
+
+      if (messageError) {
+        console.error(
+          "❌ [READ_CHAT] Error sending response message:",
+          messageError
+        );
+        return;
+      }
+
+      console.log(
+        `✅ [READ_CHAT] Message inserted into user_messages table successfully`
+      );
+
+      // Record the action
+      const { error: actionError } = await supabase
+        .from("agent_actions")
+        .insert({
+          user_id: userId,
+          type: "message",
+          target_user_id: otherUser.id,
+          target_user_name: otherUser.full_name,
+          action: `Sent response to ${otherUser.full_name}`,
+          status: "completed",
+          reasoning: "Contextual response based on their message",
+        });
+
+      if (actionError) {
+        console.error(
+          "❌ [READ_CHAT] Error recording agent action:",
+          actionError
+        );
+      } else {
+        console.log(`✅ [READ_CHAT] Agent action recorded successfully`);
+      }
+
+      console.log(
+        `✅ [READ_CHAT] Successfully sent response to ${otherUser.full_name}: "${responseMessage}"`
+      );
+    } else {
+      console.log(
+        `❌ [READ_CHAT] No response message generated, skipping send`
+      );
+    }
+  } catch (error) {
+    console.error("Error reading and responding to chat:", error);
+  }
+}
+
+async function generateContextualResponse(
+  theirMessage: string,
+  otherUser: any,
+  preferences: any
+): Promise<string> {
+  try {
+    console.log(`🤖 [OPENAI] Starting OpenAI API call...`);
+    console.log(`🤖 [OPENAI] Input message: "${theirMessage}"`);
+    console.log(`🤖 [OPENAI] Other user: ${otherUser.full_name}`);
+
+    const prompt = `Generate a natural, engaging response to this message from a dating app match.
+
+Their message: "${theirMessage}"
+
+Your profile:
+- Interests: ${preferences.interests?.join(", ") || "Not specified"}
+- Bio: ${preferences.bio || "No bio"}
+
+Their profile:
+- Name: ${otherUser.full_name}
+- Interests: ${otherUser.interests?.join(", ") || "Not specified"}
+- Bio: ${otherUser.bio || "No bio"}
+
+Generate a response that:
+1. Directly addresses what they said
+2. Shows genuine interest and engagement
+3. Asks a follow-up question or adds to the conversation
+4. Is natural and conversational (not robotic)
+5. Keeps it under 100 characters
+6. Matches the tone of their message
+
+Examples:
+- If they ask "How's your day?" → "Great! Just finished [activity]. How about yours?"
+- If they mention an interest → "That's awesome! I love [related topic]. What got you into it?"
+- If they're being flirty → "Haha, you're smooth! 😊 Tell me more..."
+- If they ask a question → Answer directly and ask back
+
+Be authentic and engaging. Don't be overly formal or use dating app clichés.`;
+
+    console.log(`🤖 [OPENAI] Sending request to OpenAI API...`);
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 80,
+      temperature: 0.8,
+    });
+
+    const generatedResponse =
+      response.choices[0]?.message?.content?.trim() ||
+      "That's interesting! Tell me more.";
+    console.log(`🤖 [OPENAI] API response received: "${generatedResponse}"`);
+
+    return generatedResponse;
+  } catch (error) {
+    console.error("❌ [OPENAI] Error generating contextual response:", error);
+    return "That's interesting! Tell me more.";
   }
 }
 

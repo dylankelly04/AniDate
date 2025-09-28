@@ -63,11 +63,24 @@ async function startAgentProcess(
       "🤖 Starting simplified agent - only sending messages to existing matches"
     );
 
+    // Set agent as active in the database
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ agent_active: true })
+      .eq("id", userId);
+
+    if (updateError) {
+      console.error("Error setting agent as active:", updateError);
+      return NextResponse.json(
+        { error: "Failed to activate agent" },
+        { status: 500 }
+      );
+    }
+
+    console.log("✅ Agent set as active in database");
+
     // Only process existing matches and send messages
     await processExistingMatches(userId, preferences, supabase);
-
-    // Also run the continuous agent process
-    await runContinuousAgent(userId, supabase);
   } catch (error) {
     console.error("Error in agent process:", error);
   }
@@ -161,7 +174,7 @@ async function processExistingMatches(
       console.log("🔍 Sample match:", allMatches[0]);
       console.log(
         "🔍 All match statuses:",
-        allMatches.map((m) => ({
+        allMatches.map((m: any) => ({
           id: m.id,
           user1_id: m.user1_id,
           user2_id: m.user2_id,
@@ -227,28 +240,18 @@ async function processExistingMatches(
         match.user1_id === userId ? match.user2_profile : match.user1_profile;
       console.log(`💬 Processing match with ${otherUser.full_name}`);
 
-      // Check if we've sent a message recently (within last 2 hours)
-      const { data: recentMessage } = await supabase
-        .from("agent_actions")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("target_user_id", otherUser.id)
-        .eq("type", "message")
-        .gte(
-          "created_at",
-          new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-        )
-        .single();
-
-      if (!recentMessage) {
-        console.log(`📤 Sending CEDAR TEST message to ${otherUser.full_name}`);
-        // Send simple "CEDAR TEST" message
-        await sendCedarTestMessage(userId, otherUser, match.id, supabase);
-      } else {
-        console.log(
-          `⏰ Already sent message to ${otherUser.full_name} recently`
-        );
-      }
+      // Always send a message - no time restrictions
+      console.log(
+        `📤 Sending contextual message to ${otherUser.full_name} (no time restrictions)`
+      );
+      // Send contextual message using OpenAI
+      await readAndRespondToChat(
+        userId,
+        otherUser,
+        match.id,
+        preferences,
+        supabase
+      );
     }
   } catch (error) {
     console.error("Error processing existing matches:", error);
@@ -381,48 +384,138 @@ async function generateAndSendMessage(
   }
 }
 
-async function sendCedarTestMessage(
+async function readAndRespondToChat(
   userId: string,
   otherUser: any,
   matchId: string,
+  preferences: any,
   supabase: any
 ) {
   try {
-    const message = "CEDAR TEST";
-
-    // Send the message using the correct table and schema
-    const { error: messageError } = await supabase
+    // Get the most recent message from the other person
+    const { data: recentMessages, error: messagesError } = await supabase
       .from("user_messages")
-      .insert({
-        match_id: matchId,
-        sender_id: userId,
-        receiver_id: otherUser.id,
-        content: message,
-        is_read: false,
-        created_at: new Date().toISOString(),
-      });
+      .select("*")
+      .eq("match_id", matchId)
+      .eq("sender_id", otherUser.id)
+      .eq("receiver_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1);
 
-    if (messageError) {
-      console.error("Error sending message:", messageError);
+    if (messagesError) {
+      console.error("Error fetching recent messages:", messagesError);
       return;
     }
 
-    // Record the action
-    await supabase.from("agent_actions").insert({
-      user_id: userId,
-      type: "message",
-      target_user_id: otherUser.id,
-      target_user_name: otherUser.full_name,
-      action: `Sent CEDAR TEST message to ${otherUser.full_name}`,
-      status: "completed",
-      reasoning: "Simple test message",
+    let responseMessage: string;
+
+    if (!recentMessages || recentMessages.length === 0) {
+      // Chat is empty, send greeting
+      responseMessage = "hi, nice to meet you!";
+      console.log(
+        `💬 Chat is empty with ${otherUser.full_name}, sending greeting`
+      );
+    } else {
+      // Generate appropriate response based on their message
+      const theirMessage = recentMessages[0].content;
+      console.log(
+        `💬 Last message from ${otherUser.full_name}: "${theirMessage}"`
+      );
+
+      responseMessage = await generateContextualResponse(
+        theirMessage,
+        otherUser,
+        preferences
+      );
+    }
+
+    if (responseMessage) {
+      // Send the response message
+      const { error: messageError } = await supabase
+        .from("user_messages")
+        .insert({
+          match_id: matchId,
+          sender_id: userId,
+          receiver_id: otherUser.id,
+          content: responseMessage,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        });
+
+      if (messageError) {
+        console.error("Error sending response message:", messageError);
+        return;
+      }
+
+      // Record the action
+      await supabase.from("agent_actions").insert({
+        user_id: userId,
+        type: "message",
+        target_user_id: otherUser.id,
+        target_user_name: otherUser.full_name,
+        action: `Sent response to ${otherUser.full_name}`,
+        status: "completed",
+        reasoning: "Contextual response based on their message",
+      });
+
+      console.log(
+        `✅ Successfully sent response to ${otherUser.full_name}: "${responseMessage}"`
+      );
+    }
+  } catch (error) {
+    console.error("Error reading and responding to chat:", error);
+  }
+}
+
+async function generateContextualResponse(
+  theirMessage: string,
+  otherUser: any,
+  preferences: any
+): Promise<string> {
+  try {
+    const prompt = `Generate a natural, engaging response to this message from a dating app match.
+
+Their message: "${theirMessage}"
+
+Your profile:
+- Interests: ${preferences.interests?.join(", ") || "Not specified"}
+- Bio: ${preferences.bio || "No bio"}
+
+Their profile:
+- Name: ${otherUser.full_name}
+- Interests: ${otherUser.interests?.join(", ") || "Not specified"}
+- Bio: ${otherUser.bio || "No bio"}
+
+Generate a response that:
+1. Directly addresses what they said
+2. Shows genuine interest and engagement
+3. Asks a follow-up question or adds to the conversation
+4. Is natural and conversational (not robotic)
+5. Keeps it under 100 characters
+6. Matches the tone of their message
+
+Examples:
+- If they ask "How's your day?" → "Great! Just finished [activity]. How about yours?"
+- If they mention an interest → "That's awesome! I love [related topic]. What got you into it?"
+- If they're being flirty → "Haha, you're smooth! 😊 Tell me more..."
+- If they ask a question → Answer directly and ask back
+
+Be authentic and engaging. Don't be overly formal or use dating app clichés.`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 80,
+      temperature: 0.8,
     });
 
-    console.log(
-      `✅ Successfully sent CEDAR TEST message to ${otherUser.full_name}`
+    return (
+      response.choices[0]?.message?.content?.trim() ||
+      "That's interesting! Tell me more."
     );
   } catch (error) {
-    console.error("Error sending CEDAR TEST message:", error);
+    console.error("Error generating contextual response:", error);
+    return "That's interesting! Tell me more.";
   }
 }
 
@@ -622,43 +715,18 @@ async function runContinuousAgent(userId: string, supabase: any) {
       const otherUser =
         match.user1_id === userId ? match.user2_profile : match.user1_profile;
 
-      // Check if we've sent a message recently (within last 2 hours)
-      const { data: recentMessage } = await supabase
-        .from("agent_actions")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("target_user_id", otherUser.id)
-        .eq("type", "message")
-        .gte(
-          "created_at",
-          new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-        )
-        .single();
-
-      if (!recentMessage) {
-        // Check if we're already waiting for user input
-        const { data: waitingAction } = await supabase
-          .from("agent_actions")
-          .select("*")
-          .eq("user_id", userId)
-          .eq("target_user_id", otherUser.id)
-          .eq("status", "waiting_for_user")
-          .single();
-
-        if (!waitingAction) {
-          console.log(
-            `📤 Sending CEDAR TEST message to ${otherUser.full_name}`
-          );
-          // Send simple CEDAR TEST message
-          await sendCedarTestMessage(userId, otherUser, match.id, supabase);
-        } else {
-          console.log(
-            `Already waiting for user input for ${otherUser.full_name}`
-          );
-        }
-      } else {
-        console.log(`Already sent recent message to ${otherUser.full_name}`);
-      }
+      // Always send a message - no time restrictions
+      console.log(
+        `📤 Sending contextual message to ${otherUser.full_name} (no time restrictions)`
+      );
+      // Send contextual message using OpenAI
+      await readAndRespondToChat(
+        userId,
+        otherUser,
+        match.id,
+        preferences,
+        supabase
+      );
     }
   } catch (error) {
     console.error("Error in continuous agent:", error);

@@ -198,4 +198,107 @@ ${
 
     return insights.trim();
   }
+
+  async readAndRespondToMatch(matchId: string): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  }> {
+    try {
+      // Get the match details
+      const { data: match, error: matchError } = await this.supabase
+        .from("matches")
+        .select(
+          `
+          *,
+          user1_profile:profiles!matches_user1_id_fkey(*),
+          user2_profile:profiles!matches_user2_id_fkey(*)
+        `
+        )
+        .eq("id", matchId)
+        .single();
+
+      if (matchError || !match) {
+        return { success: false, error: "Match not found" };
+      }
+
+      const otherUser =
+        match.user1_id === this.config.userId
+          ? match.user2_profile
+          : match.user1_profile;
+
+      // Get the most recent message from the other person
+      const { data: recentMessages, error: messagesError } = await this.supabase
+        .from("user_messages")
+        .select("*")
+        .eq("match_id", matchId)
+        .eq("sender_id", otherUser.id)
+        .eq("receiver_id", this.config.userId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (messagesError) {
+        return { success: false, error: "Error fetching messages" };
+      }
+
+      let responseMessage: string;
+
+      if (!recentMessages || recentMessages.length === 0) {
+        // Chat is empty, send greeting
+        responseMessage = "hi, nice to meet you!";
+      } else {
+        // Generate appropriate response based on their message
+        const theirMessage = recentMessages[0].content;
+        responseMessage = await this.generateContextualResponse(
+          theirMessage,
+          otherUser
+        );
+      }
+
+      return { success: true, message: responseMessage };
+    } catch (error) {
+      console.error("Error reading and responding to match:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  private async generateContextualResponse(
+    theirMessage: string,
+    otherUser: any
+  ): Promise<string> {
+    try {
+      const prompt = `Generate a natural, engaging response to this message from a dating app match.
+
+Their message: "${theirMessage}"
+
+Your profile:
+- Interests: ${this.config.preferences.interests?.join(", ") || "Not specified"}
+- Bio: ${this.config.preferences.bio || "No bio"}
+
+Their profile:
+- Name: ${otherUser.full_name}
+- Interests: ${otherUser.interests?.join(", ") || "Not specified"}
+- Bio: ${otherUser.bio || "No bio"}
+
+Generate a response that:
+1. Directly addresses what they said
+2. Shows genuine interest and engagement
+3. Asks a follow-up question or adds to the conversation
+4. Is natural and conversational (not robotic)
+5. Keeps it under 100 characters
+6. Matches the tone of their message
+
+Be authentic and engaging. Don't be overly formal or use dating app clichés.`;
+
+      // Note: This would need OpenAI integration in a real implementation
+      // For now, return a simple response
+      return "That's interesting! Tell me more.";
+    } catch (error) {
+      console.error("Error generating contextual response:", error);
+      return "That's interesting! Tell me more.";
+    }
+  }
 }
