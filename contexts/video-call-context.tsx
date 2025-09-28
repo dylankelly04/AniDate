@@ -47,6 +47,8 @@ export function VideoCallProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user?.id) return;
 
+    console.log('🔌 Setting up video call subscription for user:', user.id);
+
     const channel = supabase
       .channel(`global_video_calls_${user.id}`)
       .on(
@@ -58,19 +60,33 @@ export function VideoCallProvider({ children }: { children: React.ReactNode }) {
           filter: `to_user_id=eq.${user.id}`,
         },
         async (payload) => {
+          console.log('📨 Received real-time signal:', payload);
           const signal = payload.new;
           const data = signal.signal_data;
 
-          // Only handle offers (incoming calls)
-          if (data.type === 'offer') {
-            console.log('📞 Incoming video call from:', signal.from_user_id);
+          // Only handle offers (incoming calls) and only if not already in a call
+          if (data.type === 'offer' && !incomingCall.isVisible) {
+            // Don't show popup if user is already on video call page
+            if (window.location.pathname.includes('/video-call/')) {
+              console.log('📞 User already on video call page, skipping popup');
+              return;
+            }
+            console.log('📞 Showing incoming call popup');
             showIncomingCall(signal.from_user_id, signal.match_id);
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Successfully subscribed to video call updates');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Video call subscription error');
+        }
+      });
 
     return () => {
+      console.log('🔌 Cleaning up video call subscription');
       supabase.removeChannel(channel);
     };
   }, [user?.id, showIncomingCall, supabase]);
