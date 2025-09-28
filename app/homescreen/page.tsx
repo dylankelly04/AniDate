@@ -204,7 +204,7 @@ export default function HomescreenPage() {
           </div>
 
           {/* Action Buttons */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
             <Button
               variant="outline"
               size="lg"
@@ -214,17 +214,6 @@ export default function HomescreenPage() {
               <Link href="/matches">
                 <Users className="w-5 h-5 mr-2" />
                 View Matches
-              </Link>
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              className="h-16 text-base"
-              asChild
-            >
-              <Link href="/mystery">
-                <Sparkles className="w-5 h-5 mr-2" />
-                Mystery Mode
               </Link>
             </Button>
             <Button
