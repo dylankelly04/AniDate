@@ -19,7 +19,7 @@ import {
   CheckCircle,
   Bot,
 } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/lib/auth-context";
 import { createClient } from "@/lib/supabase/client";
 
 interface UserProfile {

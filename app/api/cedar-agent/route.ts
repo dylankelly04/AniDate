@@ -3,10 +3,6 @@ import { createClient } from "@/lib/supabase/client";
 import { CedarDatingAgent } from "@/lib/cedar-dating-agent";
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export async function POST(request: NextRequest) {
   try {
     const { userId, message, action } = await request.json();
@@ -92,6 +88,10 @@ User Message: ${message}
 Waiting Actions: ${waitingActionsForChat.map((a) => `- ${a.action}`).join("\n")}
 
 Please respond as the AI dating assistant. Be helpful, encouraging, and provide actionable advice. If there are waiting actions, mention them and offer to help with responses.`;
+
+        const openai = new OpenAI({
+          apiKey: process.env.OPENAI_API_KEY,
+        });
 
         const response = await openai.chat.completions.create({
           model: "gpt-4o-mini",
