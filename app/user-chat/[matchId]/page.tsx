@@ -748,7 +748,7 @@ export default function UserChatPage() {
                         You've earned enough points to start a video call
                       </p>
                       <Button
-                        onClick={() => router.push(`/video-call/${matchId}`)}
+                        onClick={() => router.push(`/video-call/outgoing/${matchId}`)}
                         className="w-full bg-green-600 hover:bg-green-700 text-white"
                         size="sm"
                       >

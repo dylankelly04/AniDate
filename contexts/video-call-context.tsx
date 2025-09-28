@@ -47,7 +47,6 @@ export function VideoCallProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user?.id) return;
 
-
     const channel = supabase
       .channel(`global_video_calls_${user.id}`)
       .on(
@@ -56,10 +55,15 @@ export function VideoCallProvider({ children }: { children: React.ReactNode }) {
           event: 'INSERT',
           schema: 'public',
           table: 'video_call_signals',
-          filter: `to_user_id=eq.${user.id}`,
         },
         async (payload) => {
           const signal = payload.new;
+          
+          // Only process signals meant for this user
+          if (signal.to_user_id !== user.id) {
+            return;
+          }
+          
           const data = signal.signal_data;
 
           // Only handle offers (incoming calls) and only if not already in a call

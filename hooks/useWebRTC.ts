@@ -16,7 +16,6 @@ export interface CallState {
   isConnecting: boolean;
   isIncoming: boolean;
   isAnswering: boolean; // New state to track if we're answering a call
-  isCaller: boolean; // Track if we initiated the call
   remoteUserId?: string;
   localStream?: MediaStream;
   remoteStream?: MediaStream;
@@ -29,7 +28,6 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
     isConnecting: false,
     isIncoming: false,
     isAnswering: false,
-    isCaller: false,
   });
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -66,55 +64,63 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
 
   // End the call
   const endCall = useCallback(async () => {
+    console.log('🛑 Ending call - starting cleanup');
     const currentRemoteUserId = callState.remoteUserId;
     const currentLocalStream = callState.localStream;
     
     // Send end-call signal to remote user if we have their ID
     if (currentRemoteUserId) {
       try {
+        console.log('🛑 Sending end-call signal to:', currentRemoteUserId);
         await sendSignalingMessage({
           type: 'end-call',
           from: userId,
           to: currentRemoteUserId,
         });
       } catch (error) {
-        // Ignore signaling errors during cleanup
+        console.error('Error sending end-call signal:', error);
       }
     }
     
     // Close peer connection
     if (peerConnectionRef.current) {
+      console.log('🛑 Closing peer connection');
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
 
     // Stop local stream tracks
     if (currentLocalStream) {
-      currentLocalStream.getTracks().forEach((track) => {
+      console.log('🛑 Stopping local stream tracks:', currentLocalStream.getTracks().length);
+      currentLocalStream.getTracks().forEach((track, index) => {
+        console.log(`🛑 Stopping ${track.kind} track ${index}`);
         track.stop();
       });
     }
 
     // Clear video refs
     if (localVideoRef.current) {
+      console.log('🛑 Clearing local video element');
       localVideoRef.current.srcObject = null;
     }
     if (remoteVideoRef.current) {
+      console.log('🛑 Clearing remote video element');
       remoteVideoRef.current.srcObject = null;
     }
 
     // Reset state
+    console.log('🛑 Resetting call state');
     setCallState({
       isConnected: false,
       isConnecting: false,
       isIncoming: false,
       isAnswering: false,
-      isCaller: false,
       localStream: undefined,
       remoteStream: undefined,
     });
 
     // Notify parent component
+    console.log('🛑 Call cleanup complete');
     onCallEnded?.();
   }, [callState.remoteUserId, callState.localStream, userId, onCallEnded, sendSignalingMessage]);
 
@@ -130,6 +136,7 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
     // Handle remote stream
     pc.ontrack = (event) => {
       const [remoteStream] = event.streams;
+      console.log('🎥 Received remote stream:', remoteStream, 'tracks:', remoteStream.getTracks());
       setCallState(prev => ({ ...prev, remoteStream }));
       
       if (remoteVideoRef.current) {
@@ -177,10 +184,12 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
     try {
       // If we already have a stream and it's active, return it
       if (callState.localStream && callState.localStream.active) {
+        console.log('🎥 Reusing existing active local stream');
         return callState.localStream;
       }
 
       if (callState.localStream) {
+        console.log('🎥 Stopping inactive local stream');
         callState.localStream.getTracks().forEach(track => track.stop());
       }
       
@@ -196,6 +205,7 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
         }
       });
 
+      console.log('🎥 Created local stream:', stream, 'tracks:', stream.getTracks());
       setCallState(prev => ({ ...prev, localStream: stream }));
       
       if (localVideoRef.current) {
@@ -220,8 +230,15 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
   // Start a video call
   const startCall = async (remoteUserId: string) => {
     try {
+      console.log('📞 Starting call to:', remoteUserId, 'Current state:', {
+        isConnecting: callState.isConnecting,
+        isIncoming: callState.isIncoming,
+        isAnswering: callState.isAnswering
+      });
+
       // Prevent starting call if already in progress or answering
       if (callState.isConnecting || callState.isIncoming || callState.isAnswering) {
+        console.log('📞 Call already in progress, skipping start call');
         return;
       }
 
@@ -231,7 +248,6 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
         remoteUserId,
         isIncoming: false,
         isAnswering: false,
-        isCaller: true,
         error: undefined 
       }));
 
@@ -272,7 +288,6 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
         remoteUserId: fromUserId,
         isIncoming: false,
         isAnswering: true,
-        isCaller: false,
         error: undefined 
       }));
 
@@ -305,51 +320,6 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
     }
   };
 
-  // Check for pending offers when component mounts - only if autoAnswerIncoming
-  useEffect(() => {
-    const checkPendingOffers = async () => {
-      if (autoAnswerIncoming) {
-        try {
-          const { data: pendingOffers } = await supabase
-            .from('video_call_signals')
-            .select('*')
-            .eq('match_id', matchId)
-            .eq('to_user_id', userId)
-            .eq('signal_type', 'offer')
-            .is('processed_at', null)
-            .order('created_at', { ascending: false })
-            .limit(1);
-
-          if (pendingOffers && pendingOffers.length > 0) {
-            const offer = pendingOffers[0];
-            
-            if (!callState.isConnected && !callState.isConnecting) {
-              setCallState(prev => ({ 
-                ...prev, 
-                isIncoming: true,
-                isAnswering: true,
-                isCaller: false,
-                remoteUserId: offer.from_user_id 
-              }));
-              
-              // Mark as processed immediately
-              await supabase
-                .from('video_call_signals')
-                .update({ processed_at: new Date().toISOString() })
-                .eq('id', offer.id);
-              
-              answerCall(offer.signal_data.offer, offer.from_user_id);
-            }
-          }
-        } catch (error) {
-          console.error('Error checking pending offers:', error);
-        }
-      }
-    };
-
-    checkPendingOffers();
-  }, [matchId, userId, autoAnswerIncoming, supabase]);
-
   // Listen for signaling messages
   useEffect(() => {
     const channel = supabase
@@ -368,39 +338,31 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
           if (signal.from_user_id === userId) return;
 
           const data = signal.signal_data;
+          console.log('📞 Processing signal:', data.type, 'from:', signal.from_user_id);
 
           switch (data.type) {
             case 'offer':
               // Ignore offers if we're already connected or connecting
               if (callState.isConnected || callState.isConnecting) {
+                console.log('📞 Ignoring offer - already in call state');
                 return;
-              }
-
-              // Mark this signal as processed to prevent duplicate handling
-              try {
-                await supabase
-                  .from('video_call_signals')
-                  .update({ processed_at: new Date().toISOString() })
-                  .eq('id', signal.id);
-              } catch (error) {
-                console.error('Error marking signal as processed:', error);
               }
 
               if (autoAnswerIncoming) {
                 // When auto-answering, set isAnswering immediately
+                console.log('📞 Auto-answering incoming call');
                 setCallState(prev => ({ 
                   ...prev, 
                   isIncoming: true,
                   isAnswering: true,
-                  isCaller: false,
                   remoteUserId: signal.from_user_id 
                 }));
                 answerCall(data.offer, signal.from_user_id);
               } else {
+                console.log('📞 Showing incoming call popup');
                 setCallState(prev => ({ 
                   ...prev, 
-                  isIncoming: true,
-                  isCaller: false,
+                  isIncoming: true, 
                   remoteUserId: signal.from_user_id 
                 }));
                 onIncomingCall?.(signal.from_user_id);
