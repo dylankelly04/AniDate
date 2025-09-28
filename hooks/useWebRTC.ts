@@ -127,10 +127,20 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
     // Handle remote stream
     pc.ontrack = (event) => {
       const [remoteStream] = event.streams;
+      console.log('🎥 Received remote stream:', remoteStream, 'tracks:', remoteStream.getTracks());
       setCallState(prev => ({ ...prev, remoteStream }));
       
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = remoteStream;
+        remoteVideoRef.current.onloadedmetadata = () => {
+          remoteVideoRef.current?.play().catch((error) => {
+            console.error('Error playing remote video:', error);
+          });
+        };
+        // Force play immediately as well
+        remoteVideoRef.current.play().catch((error) => {
+          console.error('Error playing remote video immediately:', error);
+        });
       }
     };
 
@@ -183,13 +193,20 @@ export function useWebRTC({ matchId, userId, onIncomingCall, onCallEnded, autoAn
         }
       });
 
+      console.log('🎥 Created local stream:', stream, 'tracks:', stream.getTracks());
       setCallState(prev => ({ ...prev, localStream: stream }));
       
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
         localVideoRef.current.onloadedmetadata = () => {
-          localVideoRef.current?.play().catch(() => {});
+          localVideoRef.current?.play().catch((error) => {
+            console.error('Error playing local video:', error);
+          });
         };
+        // Force play immediately as well
+        localVideoRef.current.play().catch((error) => {
+          console.error('Error playing local video immediately:', error);
+        });
       }
 
       return stream;

@@ -166,6 +166,27 @@ export default function VideoCallPage() {
     }
   }, [callState.isConnected, match, callTimeout]);
 
+  // Ensure video elements are properly connected to streams
+  useEffect(() => {
+    if (localVideoRef.current && callState.localStream) {
+      console.log('🎥 Setting local video stream:', callState.localStream);
+      localVideoRef.current.srcObject = callState.localStream;
+      localVideoRef.current.play().catch((error) => {
+        console.error('Error playing local video in effect:', error);
+      });
+    }
+  }, [callState.localStream]);
+
+  useEffect(() => {
+    if (remoteVideoRef.current && callState.remoteStream) {
+      console.log('🎥 Setting remote video stream:', callState.remoteStream);
+      remoteVideoRef.current.srcObject = callState.remoteStream;
+      remoteVideoRef.current.play().catch((error) => {
+        console.error('Error playing remote video in effect:', error);
+      });
+    }
+  }, [callState.remoteStream]);
+
   const handleEndCall = () => {
     endCall();
     if (callTimeout) {
