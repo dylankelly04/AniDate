@@ -13,9 +13,10 @@ import {
   ArrowLeft,
   Users,
   Calendar,
-  MapPin,
 } from "lucide-react";
 import Link from "next/link";
+import { conversationPointsService } from "@/lib/conversation-points-service";
+import { ProfileModal } from "@/components/ui/profile-modal";
 
 interface Match {
   id: string;
@@ -31,7 +32,20 @@ interface Match {
     location: string;
     bio: string;
     avatar_url: string | null;
+    original_avatar_url?: string | null;
+    anime_avatar_url?: string | null;
     interests: string[];
+    college?: string;
+    instagram_handle?: string | null;
+    twitter_handle?: string | null;
+    tiktok_handle?: string | null;
+    discord_username?: string | null;
+    snapchat_username?: string | null;
+    relationship_status?: string;
+    occupation?: string;
+    height_ft?: number;
+    height_in?: number;
+    zodiac_sign?: string;
   };
 }
 
@@ -40,6 +54,9 @@ export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [matchPoints, setMatchPoints] = useState<Record<string, number>>({});
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
 
   const supabase = createClient();
 
@@ -67,7 +84,20 @@ export default function MatchesPage() {
             location,
             bio,
             avatar_url,
-            interests
+            original_avatar_url,
+            anime_avatar_url,
+            interests,
+            college,
+            instagram_handle,
+            twitter_handle,
+            tiktok_handle,
+            discord_username,
+            snapchat_username,
+            relationship_status,
+            occupation,
+            height_ft,
+            height_in,
+            zodiac_sign
           ),
           user2_profile:profiles!matches_user2_id_fkey(
             id,
@@ -76,7 +106,20 @@ export default function MatchesPage() {
             location,
             bio,
             avatar_url,
-            interests
+            original_avatar_url,
+            anime_avatar_url,
+            interests,
+            college,
+            instagram_handle,
+            twitter_handle,
+            tiktok_handle,
+            discord_username,
+            snapchat_username,
+            relationship_status,
+            occupation,
+            height_ft,
+            height_in,
+            zodiac_sign
           )
         `
         )
@@ -110,13 +153,39 @@ export default function MatchesPage() {
         }
       });
 
-      setMatches(Array.from(uniqueMatches.values()));
+      const matchesArray = Array.from(uniqueMatches.values());
+      setMatches(matchesArray);
+      
+      // Fetch conversation points for each match
+      fetchConversationPoints(matchesArray);
     } catch (err) {
       console.error("Exception in fetchMatches:", err);
       setError("Failed to load matches");
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchConversationPoints = async (matches: Match[]) => {
+    if (!user) return;
+    
+    const pointsPromises = matches.map(async (match) => {
+      try {
+        const points = await conversationPointsService.getConversationPoints(match.id, user.id);
+        return { matchId: match.id, points };
+      } catch (error) {
+        console.error(`Error fetching points for match ${match.id}:`, error);
+        return { matchId: match.id, points: 0 };
+      }
+    });
+
+    const pointsResults = await Promise.all(pointsPromises);
+    const pointsMap: Record<string, number> = {};
+    pointsResults.forEach(({ matchId, points }) => {
+      pointsMap[matchId] = points;
+    });
+    
+    setMatchPoints(pointsMap);
   };
 
   if (loading) {
@@ -227,19 +296,21 @@ export default function MatchesPage() {
                         </AvatarFallback>
                       </Avatar>
                     </div>
-                    <CardTitle className="text-lg">
+                    <CardTitle 
+                      className="text-lg cursor-pointer hover:text-primary transition-colors"
+                      onClick={() => {
+                        setSelectedMatch(match);
+                        setShowProfileModal(true);
+                      }}
+                    >
                       {match.matched_user?.full_name}
                     </CardTitle>
-                    <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        <span>{match.matched_user?.age}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        <span>{match.matched_user?.location}</span>
-                      </div>
-                    </div>
+            <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                <span>{match.matched_user?.age}</span>
+              </div>
+            </div>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
@@ -249,27 +320,6 @@ export default function MatchesPage() {
                         </p>
                       </div>
 
-                      <div>
-                        <div className="flex flex-wrap gap-1">
-                          {match.matched_user?.interests
-                            ?.slice(0, 3)
-                            .map((interest) => (
-                              <Badge
-                                key={interest}
-                                variant="secondary"
-                                className="text-xs"
-                              >
-                                {interest}
-                              </Badge>
-                            ))}
-                          {match.matched_user?.interests &&
-                            match.matched_user.interests.length > 3 && (
-                              <Badge variant="secondary" className="text-xs">
-                                +{match.matched_user.interests.length - 3}
-                              </Badge>
-                            )}
-                        </div>
-                      </div>
 
                       {/* Chat Button */}
                       <Button asChild className="w-full">
@@ -286,6 +336,31 @@ export default function MatchesPage() {
           )}
         </div>
       </main>
+
+      {/* Profile Modal */}
+      {showProfileModal && selectedMatch && (
+        <ProfileModal
+          isOpen={showProfileModal}
+          onClose={() => {
+            setShowProfileModal(false);
+            setSelectedMatch(null);
+          }}
+          user={selectedMatch.matched_user}
+          conversationPoints={matchPoints[selectedMatch.id] || 0}
+          original_avatar_url={selectedMatch.matched_user.original_avatar_url}
+          anime_avatar_url={selectedMatch.matched_user.anime_avatar_url}
+          instagram_handle={selectedMatch.matched_user.instagram_handle}
+          twitter_handle={selectedMatch.matched_user.twitter_handle}
+          tiktok_handle={selectedMatch.matched_user.tiktok_handle}
+          discord_username={selectedMatch.matched_user.discord_username}
+          snapchat_username={selectedMatch.matched_user.snapchat_username}
+          relationship_status={selectedMatch.matched_user.relationship_status}
+          occupation={selectedMatch.matched_user.occupation}
+          height_ft={selectedMatch.matched_user.height_ft}
+          height_in={selectedMatch.matched_user.height_in}
+          zodiac_sign={selectedMatch.matched_user.zodiac_sign}
+        />
+      )}
     </div>
   );
 }

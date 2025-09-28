@@ -5,6 +5,7 @@ import { GeistMono } from "geist/font/mono";
 import { Analytics } from "@vercel/analytics/next";
 import { Suspense } from "react";
 import { AuthProvider } from "@/lib/auth-context";
+import { VideoCallProvider } from "@/contexts/video-call-context";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "sonner";
 import "./globals.css";
@@ -33,9 +34,11 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
-            <Suspense fallback={null}>{children}</Suspense>
-            <Analytics />
-            <Toaster richColors position="bottom-right" />
+            <VideoCallProvider>
+              <Suspense fallback={null}>{children}</Suspense>
+              <Analytics />
+              <Toaster richColors position="bottom-right" />
+            </VideoCallProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

@@ -184,31 +184,31 @@ export function UnlockableProfileSection({ points, user }: UnlockableProfileSect
           )}
         </div>
 
-        {/* Contact Information - Highest level unlock */}
+        {/* Real Photo - Highest level unlock */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            {isFieldUnlocked('phone_number') ? (
+            {isFieldUnlocked('real_photo') ? (
               <Unlock className="w-4 h-4 text-green-500" />
             ) : (
               <Lock className="w-4 h-4 text-gray-400" />
             )}
-            <h3 className="font-medium">Contact Information</h3>
-            {!isFieldUnlocked('phone_number') && (
+            <h3 className="font-medium">Real Photo</h3>
+            {!isFieldUnlocked('real_photo') && (
               <Badge variant="outline" className="text-xs">
                 Unlock at Level 5 (200 pts)
               </Badge>
             )}
           </div>
-          {isFieldUnlocked('phone_number') ? (
+          {isFieldUnlocked('real_photo') ? (
             <div className="pl-6">
-              <p className="text-muted-foreground text-sm">Contact information will be shown here</p>
+              <p className="text-muted-foreground text-sm">Real photo toggle will be available</p>
             </div>
           ) : (
             <div className="pl-6">
               <div className="bg-gray-100 dark:bg-gray-800 rounded p-3 text-center">
                 <Lock className="w-6 h-6 text-gray-400 mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground">
-                  Keep chatting to unlock contact info! ({getPointsToNextUnlock()} more points needed)
+                  Keep chatting to unlock real photo! ({getPointsToNextUnlock()} more points needed)
                 </p>
               </div>
             </div>
