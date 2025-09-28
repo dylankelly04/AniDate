@@ -60,6 +60,7 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [connectionLevel, setConnectionLevel] = useState<number>(0);
+  const [showScrollButton, setShowScrollButton] = useState(false);
 
   const characterId = params.characterId as string;
 
@@ -75,6 +76,12 @@ export default function ChatPage() {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+    setShowScrollButton(!isNearBottom && messages.length > 5);
   };
 
   const fetchCharacter = async () => {
@@ -432,7 +439,7 @@ export default function ChatPage() {
       />
 
       {/* Header */}
-      <header className="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-50 relative">
+      <header className="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button
@@ -487,10 +494,13 @@ export default function ChatPage() {
           <div className="flex flex-col lg:flex-row gap-6 flex-1">
             {/* Chat Area */}
             <div className="flex-1 flex flex-col">
-              <Card className="flex-1 bg-background/80 backdrop-blur-sm border-border/50 flex flex-col">
+              <Card className="h-[calc(100vh-200px)] bg-background/80 backdrop-blur-sm border-border/50 flex flex-col">
                 <CardContent className="flex-1 flex flex-col p-0">
                   {/* Messages Area */}
-                  <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                  <div
+                    className="flex-1 overflow-y-auto p-6 space-y-4 max-h-[calc(100vh-300px)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
+                    onScroll={handleScroll}
+                  >
                     {messages.map((message) => (
                       <div
                         key={message.id}
@@ -558,6 +568,24 @@ export default function ChatPage() {
                             ></div>
                           </div>
                         </div>
+                      </div>
+                    )}
+
+                    {/* Scroll to Bottom Button */}
+                    {showScrollButton && (
+                      <div className="sticky bottom-4 flex justify-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="bg-background/80 backdrop-blur-sm border-border/50 hover:bg-background/90 shadow-lg"
+                          onClick={() => {
+                            scrollToBottom();
+                            setShowScrollButton(false);
+                          }}
+                        >
+                          <ArrowLeft className="w-3 h-3 mr-1 rotate-90" />
+                          Scroll to bottom
+                        </Button>
                       </div>
                     )}
 

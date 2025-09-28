@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { createClient } from "@/lib/supabase/client";
 import { soundManager } from "@/lib/sounds";
 import { emailService } from "@/lib/email-service";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -578,7 +579,7 @@ export default function UserChatPage() {
       />
 
       {/* Header */}
-      <header className="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-50 relative">
+      <header className="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" asChild>
@@ -635,7 +636,7 @@ export default function UserChatPage() {
             {/* Chat Area */}
             <div className="flex-1">
               <Card className="h-[calc(100vh-200px)] flex flex-col">
-                <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
+                <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
                   {messages.length === 0 ? (
                     <div className="text-center py-12">
                       <MessageCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
