@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import { subtractAuraPoints, getUserAuraStats } from "@/lib/aura-service";
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -14,12 +15,44 @@ export async function POST(request: NextRequest) {
       characterPersonality,
       conversationHistory,
       userProfile,
+      userId,
     } = await request.json();
 
     if (!context) {
       return NextResponse.json(
         { success: false, error: "Missing context" },
         { status: 400 }
+      );
+    }
+
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "User ID is required" },
+        { status: 400 }
+      );
+    }
+
+    // Check if user has enough aura points (cost: 20 points)
+    const AURA_COST = 20;
+    const auraStats = await getUserAuraStats(userId);
+
+    if (!auraStats.success) {
+      return NextResponse.json(
+        { success: false, error: "Failed to check aura points" },
+        { status: 500 }
+      );
+    }
+
+    if (auraStats.auraPoints < AURA_COST) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Insufficient aura points",
+          required: AURA_COST,
+          current: auraStats.auraPoints,
+          short: AURA_COST - auraStats.auraPoints,
+        },
+        { status: 402 } // Payment Required
       );
     }
 
@@ -40,7 +73,7 @@ Personality: ${characterPersonality}
 Recent conversation: ${
         conversationHistory
           ?.slice(-3)
-          .map((msg) => `${msg.role}: ${msg.content}`)
+          .map((msg: any) => `${msg.role}: ${msg.content}`)
           .join("\n") || "No previous messages"
       }
 
@@ -59,7 +92,7 @@ Generate 3 conversation suggestions that would work well with this character's p
       const recentMessages =
         conversationHistory
           ?.slice(-3)
-          .map((msg) => `${msg.role}: ${msg.content}`)
+          .map((msg: any) => `${msg.role}: ${msg.content}`)
           .join("\n") || "No previous messages";
 
       userPrompt = `User interests: ${userInterests}
@@ -116,9 +149,37 @@ Generate 3 conversation suggestions that would work well for building connection
         }
       }
 
+      // Consume aura points after successful generation
+      console.log("🔄 Attempting to consume aura points...");
+      const auraResult = await subtractAuraPoints(
+        userId,
+        AURA_COST,
+        "Ani Suggestion"
+      );
+
+      console.log("📊 Aura result:", auraResult);
+
+      if (!auraResult.success) {
+        console.error("❌ Failed to consume aura points:", auraResult.error);
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Failed to consume aura points: " + auraResult.error,
+            suggestions: suggestions,
+            auraCost: AURA_COST,
+            auraResult: auraResult,
+          },
+          { status: 500 }
+        );
+      }
+
+      console.log("✅ Successfully consumed aura points");
+
       return NextResponse.json({
         success: true,
         suggestions: suggestions,
+        auraCost: AURA_COST,
+        auraResult: auraResult,
       });
     } catch (parseError) {
       console.error("Failed to parse OpenAI response:", parseError);

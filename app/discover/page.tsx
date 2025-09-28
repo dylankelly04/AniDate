@@ -63,6 +63,13 @@ export default function DiscoverPage() {
   const fetchProfiles = async () => {
     try {
       console.log("🔍 Fetching profiles for user:", user?.id);
+      console.log("🔍 User object:", user);
+      
+      if (!user?.id) {
+        console.error("❌ No user ID found - user might not be authenticated");
+        setError("User not authenticated. Please log in again.");
+        return;
+      }
 
       // First get all profiles except current user
       const { data: allProfiles, error: profilesError } = await supabase

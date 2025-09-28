@@ -9,14 +9,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Heart, Send, ArrowLeft, MessageCircle, User, X, Eye, EyeOff } from "lucide-react";
+import {
+  Heart,
+  Send,
+  ArrowLeft,
+  MessageCircle,
+  User,
+  X,
+  Eye,
+  EyeOff,
+  Video,
+} from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { HorizontalSuggestions } from "@/components/ui/horizontal-suggestions";
 import { generateRealPersonSuggestions } from "@/lib/ai-assistant-service";
 import { ConversationPointsDisplay } from "@/components/ui/conversation-points-display";
-import { conversationPointsService } from "@/lib/conversation-points-service";
+import {
+  conversationPointsService,
+  VIDEO_CHAT_UNLOCK_POINTS,
+} from "@/lib/conversation-points-service";
+// Video call now uses separate page instead of modal
 import { ProfileModal } from "@/components/ui/profile-modal";
 
 interface Message {
@@ -42,12 +56,30 @@ interface Match {
     avatar_url: string | null;
     original_avatar_url?: string | null;
     anime_avatar_url?: string | null;
+    age?: number;
+    bio?: string;
+    location?: string;
+    interests?: string[];
+    college?: string;
+    // Social Media Fields
+    instagram_handle?: string | null;
+    twitter_handle?: string | null;
+    tiktok_handle?: string | null;
+    discord_username?: string | null;
+    snapchat_username?: string | null;
+    // Additional Profile Fields
+    relationship_status?: string | null;
+    occupation?: string | null;
+    height_ft?: number | null;
+    height_in?: number | null;
+    zodiac_sign?: string | null;
   };
 }
 
 export default function UserChatPage() {
   const { user } = useAuth();
   const params = useParams();
+  const router = useRouter();
   const matchId = params.matchId as string;
 
   const [match, setMatch] = useState<Match | null>(null);
@@ -61,16 +93,20 @@ export default function UserChatPage() {
   const [showFullSizeImage, setShowFullSizeImage] = useState(false);
   const [showOriginalImage, setShowOriginalImage] = useState(false);
   const [showNewMessageIndicator, setShowNewMessageIndicator] = useState(false);
+  // Video call state removed - now uses separate page
+  const [lastSoundPlayedAt, setLastSoundPlayedAt] = useState<number>(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
+
+  // Camera cleanup is handled by the video call page when navigating away
   const [previousMessageCount, setPreviousMessageCount] = useState(0);
 
   useEffect(() => {
     if (user && matchId) {
       fetchMatchAndMessages();
-      
+
       // Set up polling for new messages every 2 seconds
       const interval = setInterval(() => {
         checkForNewMessages();
@@ -82,51 +118,82 @@ export default function UserChatPage() {
     }
   }, [user, matchId]);
 
+  // Simple auto-scroll: only on initial load, never interfere with user scrolling
   useEffect(() => {
-    // Only auto-scroll if user is near the bottom of the chat or if it's a new message from them
-    const chatContainer = messagesEndRef.current?.parentElement;
-    if (chatContainer) {
-      const isNearBottom = chatContainer.scrollTop + chatContainer.clientHeight >= chatContainer.scrollHeight - 100;
-      const isNewMessage = messages.length > previousMessageCount;
-      const lastMessage = messages[messages.length - 1];
-      const isOwnMessage = lastMessage?.sender_id === user?.id;
-      
-      // Auto-scroll if: user is near bottom, or they just sent a message, or it's the initial load
-      if (isNearBottom || (isNewMessage && isOwnMessage) || messages.length <= 1) {
-        setTimeout(() => {
-          scrollToBottom();
-        }, 100);
-        setShowNewMessageIndicator(false);
-      } else if (isNewMessage && !isOwnMessage) {
-        // Show indicator if there's a new message from other user and user is scrolled up
-        setShowNewMessageIndicator(true);
-      }
+    const isNewMessage = messages.length > previousMessageCount;
+    const lastMessage = messages[messages.length - 1];
+    const isOwnMessage = lastMessage?.sender_id === user?.id;
+
+    // Only show new message indicator for incoming messages when user is scrolled up
+    if (isNewMessage && !isOwnMessage) {
+      setShowNewMessageIndicator(true);
     }
-    
+
     // Update previous message count for next comparison
     setPreviousMessageCount(messages.length);
   }, [messages, user?.id]);
 
   // Refresh points whenever messages change
   useEffect(() => {
-    console.log(`Messages array changed. Length: ${messages.length}`);
+    // Debug logging removed
     if (messages.length > 0 && user && matchId) {
-      // Calculate points based on current message count
-      const currentPoints = messages.length * 5;
-      console.log(`Updating points: ${messages.length} messages × 5 = ${currentPoints} points`);
-      setConversationPoints(currentPoints);
+      // Use the conversation points service to calculate points properly (1 pt sent, 2 pts received)
+      fetchConversationPoints();
     } else if (messages.length === 0) {
       setConversationPoints(0);
     }
   }, [messages, user, matchId]); // Changed from messages.length to messages to catch all changes
 
-  // Debug: Track when conversationPoints state changes
+  // Debug logging removed to reduce console spam
+
+  // Mark messages as read when user is actively viewing the chat
   useEffect(() => {
-    console.log(`conversationPoints state changed to: ${conversationPoints}`);
-  }, [conversationPoints]);
+    const markMessagesAsRead = async () => {
+      if (!user || !messages.length) return;
+
+      const unreadMessages = messages.filter(
+        (msg) => msg.receiver_id === user.id && !msg.is_read
+      );
+
+      if (unreadMessages.length > 0) {
+        // Debug logging removed
+
+        const messageIds = unreadMessages.map((msg) => msg.id);
+        await supabase
+          .from("user_messages")
+          .update({ is_read: true })
+          .in("id", messageIds);
+
+        // Update local state to reflect read status
+        setMessages((prevMessages) =>
+          prevMessages.map((msg) =>
+            messageIds.includes(msg.id) ? { ...msg, is_read: true } : msg
+          )
+        );
+      }
+    };
+
+    // Debounce the read marking to avoid excessive updates
+    const timeoutId = setTimeout(markMessagesAsRead, 500);
+    return () => clearTimeout(timeoutId);
+  }, [messages, user, supabase]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const fetchConversationPoints = async () => {
+    if (!user || !matchId) return;
+
+    try {
+      const points = await conversationPointsService.getConversationPoints(
+        matchId,
+        user.id
+      );
+      setConversationPoints(points);
+    } catch (error) {
+      console.error("Error fetching conversation points:", error);
+    }
   };
 
   // Initial scroll to bottom when messages first load
@@ -151,51 +218,52 @@ export default function UserChatPage() {
       if (error || !messagesData) return;
 
       const currentCount = messagesData.length;
-      
-      // If we have new messages and the count increased, play sound for new ones
+
+      // If we have new messages and the count increased, handle them
       if (currentCount > previousMessageCount && previousMessageCount > 0) {
         const newMessages = messagesData.slice(previousMessageCount);
         const messagesForCurrentUser = newMessages.filter(
-          msg => msg.receiver_id === user?.id && !msg.is_read
+          (msg) => msg.receiver_id === user?.id && !msg.is_read
         );
-        
+
         if (messagesForCurrentUser.length > 0) {
-          console.log("New messages received, playing sound...");
-          soundManager.playMessageReceived();
-          
-          // Mark new messages as read
-          const messageIds = messagesForCurrentUser.map(msg => msg.id);
+          console.log(
+            `📨 ${messagesForCurrentUser.length} new messages received`
+          );
+
+          // Mark new messages as read FIRST
+          const messageIds = messagesForCurrentUser.map((msg) => msg.id);
           await supabase
             .from("user_messages")
             .update({ is_read: true })
             .in("id", messageIds);
+
+          console.log("✅ Messages marked as read");
+
+          // Play sound only once per batch and with debounce (minimum 2 seconds between sounds)
+          const now = Date.now();
+          if (now - lastSoundPlayedAt > 2000) {
+            console.log("🔊 Playing message received sound");
+            soundManager.playMessageReceived();
+            setLastSoundPlayedAt(now);
+          } else {
+            console.log("🔇 Skipping sound (too recent)");
+          }
         }
       }
 
       setMessages(messagesData);
       setPreviousMessageCount(currentCount);
-      
+
       // Update points immediately when new messages are received
       if (messagesData && messagesData.length > 0) {
-        const newPoints = messagesData.length * 5;
-        console.log(`Updating points after receiving messages: ${messagesData.length} × 5 = ${newPoints}`);
-        setConversationPoints(newPoints);
+        // Recalculate points with new system (1 pt sent, 2 pts received)
+        setTimeout(async () => {
+          await fetchConversationPoints();
+        }, 100);
       }
     } catch (err) {
       console.error("Error checking for new messages:", err);
-    }
-  };
-
-  const fetchConversationPoints = async () => {
-    if (!user || !matchId) return;
-    
-    try {
-      console.log(`Fetching conversation points for match ${matchId}...`);
-      const points = await conversationPointsService.getConversationPoints(matchId, user.id);
-      console.log(`Fetched ${points} conversation points`);
-      setConversationPoints(points);
-    } catch (err) {
-      console.error("Error fetching conversation points:", err);
     }
   };
 
@@ -207,12 +275,12 @@ export default function UserChatPage() {
       // First, get the match details
       const { data: matchData, error: matchError } = await supabase
         .from("matches")
-          .select(
-            `
-            *,
-            matched_user:profiles!matches_user2_id_fkey(
-              id,
-              full_name,
+        .select(
+          `
+          *,
+          matched_user:profiles!matches_user2_id_fkey(
+            id,
+            full_name,
               avatar_url,
               original_avatar_url,
               anime_avatar_url,
@@ -220,10 +288,20 @@ export default function UserChatPage() {
               bio,
               location,
               interests,
-              college
-            )
-          `
+              college,
+              instagram_handle,
+              twitter_handle,
+              tiktok_handle,
+              discord_username,
+              snapchat_username,
+              relationship_status,
+              occupation,
+              height_ft,
+              height_in,
+              zodiac_sign
           )
+        `
+        )
         .eq("id", matchId)
         .eq("status", "accepted")
         .single();
@@ -238,7 +316,9 @@ export default function UserChatPage() {
       if (matchData.user2_id === user?.id) {
         const { data: user1Profile, error: profileError } = await supabase
           .from("profiles")
-          .select("id, full_name, avatar_url, original_avatar_url, anime_avatar_url, age, bio, location, interests, college")
+          .select(
+            "id, full_name, avatar_url, original_avatar_url, anime_avatar_url, age, bio, location, interests, college, instagram_handle, twitter_handle, tiktok_handle, discord_username, snapchat_username, relationship_status, occupation, height_ft, height_in, zodiac_sign"
+          )
           .eq("id", matchData.user1_id)
           .single();
 
@@ -283,7 +363,7 @@ export default function UserChatPage() {
             .in("id", messageIds);
         }
       }
-      
+
       // Fetch conversation points
       await fetchConversationPoints();
     } catch (err) {
@@ -326,24 +406,27 @@ export default function UserChatPage() {
       setMessages((prev) => {
         const newMessages = [...prev, data];
         console.log(`After adding message: ${newMessages.length} messages`);
-        
-        // Update points immediately
-        const newPoints = newMessages.length * 5;
-        console.log(`Updating points immediately: ${newMessages.length} × 5 = ${newPoints}`);
-        console.log(`Current conversationPoints state before update: ${conversationPoints}`);
-        setConversationPoints(newPoints);
-        console.log(`setConversationPoints called with: ${newPoints}`);
-        
         return newMessages;
       });
+
+      // Update points immediately after state update
+      // Recalculate points with new system (1 pt sent, 2 pts received)
+      console.log(`Updating points immediately after sending message`);
+      console.log(
+        `Current conversationPoints state before update: ${conversationPoints}`
+      );
+      setTimeout(async () => {
+        await fetchConversationPoints();
+        console.log(`Points recalculated after sending message`);
+      }, 100);
       setNewMessage("");
-      
+
       // Refocus the input and scroll to bottom after sending message
       setTimeout(() => {
         messageInputRef.current?.focus();
         scrollToBottom();
       }, 100);
-      
+
       console.log("Playing message sent sound...");
       soundManager.playMessageSent();
 
@@ -393,20 +476,42 @@ export default function UserChatPage() {
         .single();
 
       // Transform messages to the expected format
-      const formattedMessages = messages.map(msg => ({
-        role: msg.sender_id === user?.id ? 'user' : 'assistant',
-        content: msg.content
+      const formattedMessages = messages.map((msg) => ({
+        role: msg.sender_id === user?.id ? "user" : "assistant",
+        content: msg.content,
       }));
 
-      const result = await generateRealPersonSuggestions(formattedMessages, {
-        interests: profile?.interests || [],
-        personality: profile?.bio || "",
-      });
+      const result = await generateRealPersonSuggestions(
+        formattedMessages,
+        {
+          interests: profile?.interests || [],
+          personality: profile?.bio || "",
+        },
+        user.id
+      );
 
       if (result.success && result.suggestions) {
+        // Show aura cost feedback
+        if (result.auraCost) {
+          toast.success(
+            `✨ Used ${result.auraCost} aura points for suggestions!`,
+            {
+              duration: 3000,
+            }
+          );
+        }
         return result.suggestions;
       } else {
-        console.error("Failed to generate suggestions:", result.error);
+        // Handle insufficient aura points
+        if (result.error === "Insufficient aura points") {
+          toast.error(
+            `💫 Need ${result.required} aura points (you have ${result.current}). Chat more to earn points!`,
+            { duration: 5000 }
+          );
+        } else {
+          console.error("Failed to generate suggestions:", result.error);
+          toast.error("Failed to generate suggestions. Please try again.");
+        }
         return [];
       }
     } catch (error) {
@@ -483,7 +588,7 @@ export default function UserChatPage() {
               </Link>
             </Button>
             <div className="flex items-center gap-3">
-              <Avatar 
+              <Avatar
                 className="w-8 h-8 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
                 onClick={() => setShowFullSizeImage(true)}
               >
@@ -491,7 +596,9 @@ export default function UserChatPage() {
                   src={
                     showOriginalImage && match.matched_user?.original_avatar_url
                       ? match.matched_user.original_avatar_url
-                      : match.matched_user?.anime_avatar_url || match.matched_user?.avatar_url || ""
+                      : match.matched_user?.anime_avatar_url ||
+                        match.matched_user?.avatar_url ||
+                        ""
                   }
                   alt={match.matched_user?.full_name}
                 />
@@ -500,7 +607,7 @@ export default function UserChatPage() {
                 </AvatarFallback>
               </Avatar>
               <div>
-                <button 
+                <button
                   onClick={() => setShowProfileModal(true)}
                   className="font-semibold hover:text-primary transition-colors cursor-pointer"
                 >
@@ -568,7 +675,7 @@ export default function UserChatPage() {
                       </div>
                     ))
                   )}
-                  
+
                   {/* New Message Indicator */}
                   {showNewMessageIndicator && (
                     <div className="sticky bottom-0 flex justify-center py-2">
@@ -586,7 +693,7 @@ export default function UserChatPage() {
                       </Button>
                     </div>
                   )}
-                  
+
                   <div ref={messagesEndRef} />
                 </CardContent>
 
@@ -623,6 +730,33 @@ export default function UserChatPage() {
                   points={conversationPoints}
                   onPointsUpdate={setConversationPoints}
                 />
+              )}
+
+              {/* Video Call Button */}
+              {user && match?.matched_user && conversationPoints >= 750 && (
+                <Card className="bg-gradient-to-r from-green-500/10 to-blue-500/10 border-green-500/20">
+                  <CardContent className="p-4">
+                    <div className="text-center space-y-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <Video className="w-5 h-5 text-green-600" />
+                        <h3 className="font-semibold text-green-700">
+                          Video Chat Unlocked!
+                        </h3>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        You've earned enough points to start a video call
+                      </p>
+                      <Button
+                        onClick={() => router.push(`/video-call/${matchId}`)}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white"
+                        size="sm"
+                      >
+                        <Video className="w-4 h-4 mr-2" />
+                        Start Video Call
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               )}
 
               {/* AI Suggestions Panel */}
@@ -692,28 +826,31 @@ export default function UserChatPage() {
               </Button>
 
               {/* Photo Toggle Button for Full Size */}
-              {conversationPointsService.isFieldUnlocked(conversationPoints, 'real_photo') && 
-               match.matched_user.original_avatar_url && 
-               match.matched_user.anime_avatar_url && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="absolute top-4 left-4 z-10 bg-black/50 hover:bg-black/70 text-white border-white/20"
-                  onClick={() => setShowOriginalImage(!showOriginalImage)}
-                >
-                  {showOriginalImage ? (
-                    <>
-                      <EyeOff className="w-3 h-3 mr-1" />
-                      Anime
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="w-3 h-3 mr-1" />
-                      Real
-                    </>
-                  )}
-                </Button>
-              )}
+              {conversationPointsService.isFieldUnlocked(
+                conversationPoints,
+                "real_photo"
+              ) &&
+                match.matched_user.original_avatar_url &&
+                match.matched_user.anime_avatar_url && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="absolute top-4 left-4 z-10 bg-black/50 hover:bg-black/70 text-white border-white/20"
+                    onClick={() => setShowOriginalImage(!showOriginalImage)}
+                  >
+                    {showOriginalImage ? (
+                      <>
+                        <EyeOff className="w-3 h-3 mr-1" />
+                        Anime
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-3 h-3 mr-1" />
+                        Real
+                      </>
+                    )}
+                  </Button>
+                )}
 
               {/* Full Size Image */}
               <div className="flex items-center justify-center bg-black min-h-[60vh] max-h-[80vh]">
@@ -721,31 +858,40 @@ export default function UserChatPage() {
                   src={
                     showOriginalImage && match.matched_user.original_avatar_url
                       ? match.matched_user.original_avatar_url
-                      : match.matched_user.anime_avatar_url || match.matched_user.avatar_url || ""
+                      : match.matched_user.anime_avatar_url ||
+                        match.matched_user.avatar_url ||
+                        ""
                   }
                   alt={match.matched_user.full_name}
                   className="max-w-full max-h-full object-contain"
-                  style={{ maxHeight: '80vh' }}
+                  style={{ maxHeight: "80vh" }}
                 />
               </div>
 
               {/* Image Info */}
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
                 <div className="text-white text-center">
-                  <h3 className="text-lg font-semibold">{match.matched_user.full_name}</h3>
-                  {conversationPointsService.isFieldUnlocked(conversationPoints, 'real_photo') && 
-                   match.matched_user.original_avatar_url && 
-                   match.matched_user.anime_avatar_url && (
-                    <p className="text-sm text-white/80 mt-1">
-                      {showOriginalImage ? 'Real Photo' : 'Anime Version'}
-                    </p>
-                  )}
+                  <h3 className="text-lg font-semibold">
+                    {match.matched_user.full_name}
+                  </h3>
+                  {conversationPointsService.isFieldUnlocked(
+                    conversationPoints,
+                    "real_photo"
+                  ) &&
+                    match.matched_user.original_avatar_url &&
+                    match.matched_user.anime_avatar_url && (
+                      <p className="text-sm text-white/80 mt-1">
+                        {showOriginalImage ? "Real Photo" : "Anime Version"}
+                      </p>
+                    )}
                 </div>
               </div>
             </div>
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Video call now uses separate page - no modal needed */}
     </div>
   );
 }

@@ -11,8 +11,8 @@ export const PROFILE_UNLOCK_LEVELS: ProfileUnlockLevel[] = [
   {
     level: 1,
     pointsRequired: 0,
-    unlocks: ["age", "bio"],
-    description: "Age and bio only"
+    unlocks: ["basic_info", "bio", "avatar"],
+    description: "Basic profile information"
   },
   {
     level: 2,
@@ -37,17 +37,8 @@ export const PROFILE_UNLOCK_LEVELS: ProfileUnlockLevel[] = [
     pointsRequired: 200,
     unlocks: ["real_photo"],
     description: "Real (non-AI) photo"
-  },
-  {
-    level: 6,
-    pointsRequired: 750,
-    unlocks: ["video_chat"],
-    description: "Video chat feature"
   }
 ];
-
-// Video chat unlock threshold
-export const VIDEO_CHAT_UNLOCK_POINTS = 750;
 
 export class ConversationPointsService {
   private supabase = createClient();
@@ -58,35 +49,25 @@ export class ConversationPointsService {
    */
   async getConversationPoints(matchId: string, userId: string): Promise<number> {
     try {
-      // Calculate points based on message types: 1 point for sent, 2 points for received
-      const { data: messages, error } = await this.supabase
-        .from('user_messages')
-        .select('sender_id')
-        .eq('match_id', matchId);
-
-      if (error) {
-        console.error('Error fetching messages for points calculation:', error);
-        return 0;
-      }
-
-      if (!messages || messages.length === 0) {
-        return 0;
-      }
-
-      let totalPoints = 0;
-      messages.forEach(message => {
-        if (message.sender_id === userId) {
-          totalPoints += 1; // 1 point for sending a message
-        } else {
-          totalPoints += 2; // 2 points for receiving a message
-        }
+      // First try the RPC function
+      const { data: rpcData, error: rpcError } = await this.supabase.rpc('get_conversation_points', {
+        p_match_id: matchId,
+        p_user_id: userId
       });
 
-      // Debug logging removed
-      return totalPoints;
-    } catch (error) {
-      console.error('Error getting conversation points:', error);
-      return 0;
+      if (!rpcError && rpcData !== null) {
+        return rpcData;
+      }
+
+      // Fallback: calculate directly from message count
+      console.log('RPC failed, using fallback calculation:', rpcError);
+      const messageCount = await this.getMessageCount(matchId);
+      return messageCount * 5;
+    } catch (err) {
+      console.error('Exception in getConversationPoints:', err);
+      // Final fallback: calculate from message count
+      const messageCount = await this.getMessageCount(matchId);
+      return messageCount * 5;
     }
   }
 
@@ -143,9 +124,11 @@ export class ConversationPointsService {
     // Check all levels up to and including the current level
     for (const level of PROFILE_UNLOCK_LEVELS) {
       if (points >= level.pointsRequired && level.unlocks.includes(field)) {
+        console.log(`Field "${field}" unlocked at level ${level.level} (${level.pointsRequired} pts) with ${points} points`);
         return true;
       }
     }
+    console.log(`Field "${field}" locked - need more points (current: ${points})`);
     return false;
   }
 
@@ -176,10 +159,6 @@ export class ConversationPointsService {
    */
   getFutureUnlocks(points: number): ProfileUnlockLevel[] {
     return PROFILE_UNLOCK_LEVELS.filter(level => points < level.pointsRequired);
-  }
-
-  canInitiateVideoCall(points: number): boolean {
-    return points >= VIDEO_CHAT_UNLOCK_POINTS;
   }
 }
 
