@@ -48,8 +48,25 @@ export function VideoCallNotification({ isVisible, onClose, fromUserId, matchId 
     }
   };
 
-  const handleAcceptCall = () => {
+  const handleAcceptCall = async () => {
     setLoading(true);
+    
+    try {
+      // Send call accepted signal to let the caller know
+      await supabase
+        .from('video_call_signals')
+        .insert({
+          match_id: matchId,
+          from_user_id: user?.id,
+          to_user_id: fromUserId,
+          signal_type: 'call-accepted',
+          signal_data: { type: 'call-accepted' },
+          created_at: new Date().toISOString(),
+        });
+    } catch (error) {
+      console.error('Error sending call accepted signal:', error);
+    }
+    
     // Navigate to video call page - it will automatically answer the incoming call
     router.push(`/video-call/${matchId}`);
   };

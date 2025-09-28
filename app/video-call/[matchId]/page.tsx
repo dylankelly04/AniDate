@@ -143,15 +143,9 @@ export default function VideoCallPage() {
   // Auto-start call when page loads or answer incoming call
   useEffect(() => {
     if (match && user?.id && !callState.isConnecting && !callState.isConnected) {
-      if (callState.isIncoming) {
-        console.log('📞 Answering incoming video call');
-        // The WebRTC hook will handle the incoming call automatically
-        // when the user navigates to this page
-      } else {
-        console.log('🎬 Starting video call automatically');
+      if (!callState.isIncoming) {
         startCall(match.matched_user.id);
         
-        // Set timeout for unanswered calls (30 seconds)
         const timeout = setTimeout(() => {
           handleEndCall();
         }, 30000);
@@ -233,11 +227,8 @@ export default function VideoCallPage() {
           <div className="flex items-center gap-4">
             <Button 
               onClick={() => {
-                // Clean up streams before going back
                 if (callState.localStream) {
-                  console.log('🛑 Stopping camera tracks - back button');
                   callState.localStream.getTracks().forEach(track => {
-                    console.log(`🛑 Stopping ${track.kind} track`);
                     track.stop();
                   });
                 }
@@ -261,7 +252,9 @@ export default function VideoCallPage() {
           {callState.isConnecting && (
             <div className="flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-sm">Connecting...</span>
+              <span className="text-sm">
+                {callState.isIncoming ? 'Joining call...' : 'Calling... waiting for answer'}
+              </span>
             </div>
           )}
         </div>
