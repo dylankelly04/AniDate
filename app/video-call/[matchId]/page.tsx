@@ -160,6 +160,7 @@ export default function VideoCallPage() {
         startCall(match.matched_user.id);
         
         const timeout = setTimeout(() => {
+          console.log('📞 ⏰ Call timeout reached (30s) - ending call');
           handleEndCall();
         }, 30000);
         
@@ -180,7 +181,14 @@ export default function VideoCallPage() {
 
   // Clear timeout when call connects or ends
   useEffect(() => {
-    if (callState.isConnected || !match) {
+    if (callState.isConnected) {
+      console.log('📞 ✅ Call connected - clearing timeout');
+      if (callTimeout) {
+        clearTimeout(callTimeout);
+        setCallTimeout(null);
+      }
+    } else if (!match) {
+      console.log('📞 ⚠️ No match - clearing timeout');
       if (callTimeout) {
         clearTimeout(callTimeout);
         setCallTimeout(null);
@@ -204,7 +212,13 @@ export default function VideoCallPage() {
   }, [callState.remoteStream]);
 
   const handleEndCall = () => {
-    console.log('🛑 User clicked End Call button');
+    console.log('🛑 handleEndCall called - reason: user action or timeout');
+    console.log('🛑 Current call state:', {
+      isConnected: callState.isConnected,
+      isConnecting: callState.isConnecting,
+      isCaller: callState.isCaller,
+      hasTimeout: !!callTimeout
+    });
     
     // Check current stream status before calling endCall
     if (callState.localStream) {
@@ -215,10 +229,12 @@ export default function VideoCallPage() {
     endCall();
     
     if (callTimeout) {
+      console.log('🛑 Clearing timeout in handleEndCall');
       clearTimeout(callTimeout);
       setCallTimeout(null);
     }
     
+    console.log('🛑 Navigating back to chat');
     router.push(`/user-chat/${matchId}`);
   };
 
