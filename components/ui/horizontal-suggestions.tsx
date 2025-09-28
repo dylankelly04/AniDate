@@ -195,6 +195,9 @@ export function HorizontalSuggestions({
         <span className="text-sm font-medium text-pink-700">
           {loading ? "Thinking..." : "Ask Ani"}
         </span>
+        <span className="ml-2 text-xs text-pink-600 bg-pink-100 px-2 py-1 rounded-full">
+          -20 ✨
+        </span>
       </Button>
     </div>
   );

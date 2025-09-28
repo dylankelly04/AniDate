@@ -7,6 +7,11 @@ export interface SuggestionsResponse {
   success: boolean;
   suggestions?: ConversationSuggestion[];
   error?: string;
+  auraCost?: number;
+  auraResult?: any;
+  required?: number;
+  current?: number;
+  short?: number;
 }
 
 /**
@@ -20,7 +25,8 @@ export async function generateConversationSuggestions(
   userProfile?: {
     interests?: string[];
     personality?: string;
-  }
+  },
+  userId?: string
 ): Promise<SuggestionsResponse> {
   try {
     console.log("Generating conversation suggestions:", {
@@ -41,6 +47,7 @@ export async function generateConversationSuggestions(
         characterPersonality,
         conversationHistory,
         userProfile,
+        userId,
       }),
     });
 
@@ -51,6 +58,9 @@ export async function generateConversationSuggestions(
       return {
         success: false,
         error: data.error || `HTTP ${response.status}`,
+        required: data.required,
+        current: data.current,
+        short: data.short,
       };
     }
 
@@ -70,6 +80,8 @@ export async function generateConversationSuggestions(
     return {
       success: true,
       suggestions: data.suggestions,
+      auraCost: data.auraCost,
+      auraResult: data.auraResult,
     };
   } catch (error) {
     console.error("Network error calling AI Assistant API:", error);
@@ -87,13 +99,16 @@ export async function generateConversationSuggestions(
 export async function generateAICharacterSuggestions(
   characterName: string,
   characterPersonality: string,
-  conversationHistory: Array<{ role: string; content: string }>
+  conversationHistory: Array<{ role: string; content: string }>,
+  userId?: string
 ): Promise<SuggestionsResponse> {
   return generateConversationSuggestions(
     "ai_character",
     characterName,
     characterPersonality,
-    conversationHistory
+    conversationHistory,
+    undefined,
+    userId
   );
 }
 
@@ -105,13 +120,15 @@ export async function generateRealPersonSuggestions(
   userProfile?: {
     interests?: string[];
     personality?: string;
-  }
+  },
+  userId?: string
 ): Promise<SuggestionsResponse> {
   return generateConversationSuggestions(
     "real_person",
     undefined,
     undefined,
     conversationHistory,
-    userProfile
+    userProfile,
+    userId
   );
 }

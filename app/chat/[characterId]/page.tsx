@@ -350,23 +350,43 @@ export default function ChatPage() {
   };
 
   const handleGenerateSuggestions = async () => {
-    if (!character) return [];
+    if (!character || !user) return [];
 
     try {
       const result = await generateAICharacterSuggestions(
         character.name,
         character.personality,
-        messages
+        messages,
+        user.id
       );
 
       if (result.success && result.suggestions) {
+        // Show aura cost feedback
+        if (result.auraCost) {
+          toast.success(
+            `✨ Used ${result.auraCost} aura points for suggestions!`,
+            {
+              duration: 3000,
+            }
+          );
+        }
         return result.suggestions;
       } else {
-        console.error("Failed to generate suggestions:", result.error);
+        // Handle insufficient aura points
+        if (result.error === "Insufficient aura points") {
+          toast.error(
+            `💫 Need ${result.required} aura points (you have ${result.current}). Chat more to earn points!`,
+            { duration: 5000 }
+          );
+        } else {
+          console.error("Failed to generate suggestions:", result.error);
+          toast.error("Failed to generate suggestions. Please try again.");
+        }
         return [];
       }
     } catch (error) {
       console.error("Error generating suggestions:", error);
+      toast.error("Error generating suggestions. Please try again.");
       return [];
     }
   };

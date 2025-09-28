@@ -39,6 +39,7 @@ import {
   MessageCircle,
   Sparkles,
   Trophy,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
@@ -140,8 +141,7 @@ export default function ProfilePage() {
   const [tiktokHandle, setTiktokHandle] = useState("");
   const [discordUsername, setDiscordUsername] = useState("");
   const [snapchatUsername, setSnapchatUsername] = useState("");
-  
-  
+
   // Additional Profile Fields
   const [relationshipStatus, setRelationshipStatus] = useState("");
   const [occupation, setOccupation] = useState("");
@@ -183,8 +183,43 @@ export default function ProfilePage() {
     }
   }, [user]);
 
+  // Refresh profile when user returns to this page (e.g., after using Ani suggestions)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (user && profile) {
+        console.log("🔄 Window focused - refreshing profile data");
+        fetchProfile();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden && user && profile) {
+        console.log("🔄 Page became visible - refreshing profile data");
+        fetchProfile();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Also refresh every 30 seconds when page is active
+    const interval = setInterval(() => {
+      if (user && profile && !document.hidden) {
+        console.log("🔄 Periodic refresh - updating profile data");
+        fetchProfile();
+      }
+    }, 30000); // 30 seconds
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearInterval(interval);
+    };
+  }, [user, profile]);
+
   const fetchProfile = async () => {
     try {
+      console.log("🔄 Fetching profile data for user:", user?.id);
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
@@ -192,9 +227,16 @@ export default function ProfilePage() {
         .single();
 
       if (error) {
+        console.error("❌ Error fetching profile:", error);
         setError("Profile not found. Please complete your profile setup.");
         return;
       }
+
+      console.log("✅ Profile data fetched:", {
+        aura_points: data.aura_points,
+        level: data.level,
+        total_aura_earned: data.total_aura_earned,
+      });
 
       setProfile(data);
 
@@ -206,15 +248,14 @@ export default function ProfilePage() {
       setGender(data.gender || "");
       setLookingFor(data.looking_for || "");
       setInterests(data.interests || []);
-      
+
       // Populate social media fields
       setInstagramHandle(data.instagram_handle || "");
       setTwitterHandle(data.twitter_handle || "");
       setTiktokHandle(data.tiktok_handle || "");
       setDiscordUsername(data.discord_username || "");
       setSnapchatUsername(data.snapchat_username || "");
-      
-      
+
       // Populate additional profile fields
       setRelationshipStatus(data.relationship_status || "");
       setOccupation(data.occupation || "");
@@ -509,8 +550,6 @@ export default function ProfilePage() {
         console.error("Anime image upload error:", uploadError);
         console.error("Upload error details:", {
           message: uploadError.message,
-          statusCode: uploadError.statusCode,
-          error: uploadError.error,
         });
         throw new Error(`Failed to upload anime image: ${uploadError.message}`);
       }
@@ -572,8 +611,6 @@ export default function ProfilePage() {
         console.error("Upload error:", uploadError);
         console.error("Error details:", {
           message: uploadError.message,
-          statusCode: uploadError.statusCode,
-          error: uploadError.error,
         });
         setError(`Failed to upload image: ${uploadError.message}`);
         return;
@@ -778,9 +815,52 @@ export default function ProfilePage() {
           {/* Aura Points Section - NEW */}
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-primary" />
-                Aura Points & Level
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  Aura Points & Level
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      console.log("🔄 Manual refresh button clicked");
+                      fetchProfile();
+                    }}
+                    className="h-8 w-8 p-0"
+                    title="Refresh aura points"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      console.log("🔍 Checking database directly...");
+                      const { data, error } = await supabase
+                        .from("profiles")
+                        .select("aura_points, level, total_aura_earned")
+                        .eq("id", user?.id)
+                        .single();
+
+                      if (error) {
+                        console.error("❌ Database check error:", error);
+                      } else {
+                        console.log("🔍 Database values:", data);
+                        console.log("🔍 Current profile state:", {
+                          aura_points: profile?.aura_points,
+                          level: profile?.level,
+                          total_aura_earned: profile?.total_aura_earned,
+                        });
+                      }
+                    }}
+                    className="h-8 px-2 text-xs"
+                    title="Check database directly"
+                  >
+                    DB
+                  </Button>
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -1096,7 +1176,7 @@ export default function ProfilePage() {
                       <div>
                         <Label>Email</Label>
                         <p className="text-sm text-muted-foreground mt-1">
-                          {profile.email}
+                          {user?.email || "Not available"}
                         </p>
                       </div>
                     </CardContent>
@@ -1114,7 +1194,9 @@ export default function ProfilePage() {
                           {editing ? (
                             <Input
                               value={instagramHandle}
-                              onChange={(e) => setInstagramHandle(e.target.value)}
+                              onChange={(e) =>
+                                setInstagramHandle(e.target.value)
+                              }
                               placeholder="@username"
                               className="mt-1"
                             />
@@ -1159,7 +1241,9 @@ export default function ProfilePage() {
                           {editing ? (
                             <Input
                               value={discordUsername}
-                              onChange={(e) => setDiscordUsername(e.target.value)}
+                              onChange={(e) =>
+                                setDiscordUsername(e.target.value)
+                              }
                               placeholder="username#1234"
                               className="mt-1"
                             />
@@ -1174,7 +1258,9 @@ export default function ProfilePage() {
                           {editing ? (
                             <Input
                               value={snapchatUsername}
-                              onChange={(e) => setSnapchatUsername(e.target.value)}
+                              onChange={(e) =>
+                                setSnapchatUsername(e.target.value)
+                              }
                               placeholder="username"
                               className="mt-1"
                             />
@@ -1223,7 +1309,9 @@ export default function ProfilePage() {
                                   min="3"
                                   max="8"
                                 />
-                                <Label className="text-xs text-muted-foreground mt-1">Feet</Label>
+                                <Label className="text-xs text-muted-foreground mt-1">
+                                  Feet
+                                </Label>
                               </div>
                               <div className="flex-1">
                                 <Input
@@ -1234,14 +1322,16 @@ export default function ProfilePage() {
                                   min="0"
                                   max="11"
                                 />
-                                <Label className="text-xs text-muted-foreground mt-1">Inches</Label>
+                                <Label className="text-xs text-muted-foreground mt-1">
+                                  Inches
+                                </Label>
                               </div>
                             </div>
                           ) : (
                             <p className="text-sm text-muted-foreground mt-1">
-                              {profile.height_ft && profile.height_in !== null 
-                                ? `${profile.height_ft}'${profile.height_in}"` 
-                                : profile.height_ft 
+                              {profile.height_ft && profile.height_in !== null
+                                ? `${profile.height_ft}'${profile.height_in}"`
+                                : profile.height_ft
                                 ? `${profile.height_ft}'0"`
                                 : "Not provided"}
                             </p>
@@ -1250,16 +1340,25 @@ export default function ProfilePage() {
                         <div>
                           <Label>Relationship Status</Label>
                           {editing ? (
-                            <Select value={relationshipStatus} onValueChange={setRelationshipStatus}>
+                            <Select
+                              value={relationshipStatus}
+                              onValueChange={setRelationshipStatus}
+                            >
                               <SelectTrigger className="mt-1">
                                 <SelectValue placeholder="Select status" />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="single">Single</SelectItem>
                                 <SelectItem value="dating">Dating</SelectItem>
-                                <SelectItem value="relationship">In a relationship</SelectItem>
-                                <SelectItem value="complicated">It's complicated</SelectItem>
-                                <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
+                                <SelectItem value="relationship">
+                                  In a relationship
+                                </SelectItem>
+                                <SelectItem value="complicated">
+                                  It's complicated
+                                </SelectItem>
+                                <SelectItem value="prefer_not_to_say">
+                                  Prefer not to say
+                                </SelectItem>
                               </SelectContent>
                             </Select>
                           ) : (
@@ -1271,7 +1370,10 @@ export default function ProfilePage() {
                         <div>
                           <Label>Zodiac Sign</Label>
                           {editing ? (
-                            <Select value={zodiacSign} onValueChange={setZodiacSign}>
+                            <Select
+                              value={zodiacSign}
+                              onValueChange={setZodiacSign}
+                            >
                               <SelectTrigger className="mt-1">
                                 <SelectValue placeholder="Select sign" />
                               </SelectTrigger>
@@ -1284,9 +1386,15 @@ export default function ProfilePage() {
                                 <SelectItem value="virgo">Virgo</SelectItem>
                                 <SelectItem value="libra">Libra</SelectItem>
                                 <SelectItem value="scorpio">Scorpio</SelectItem>
-                                <SelectItem value="sagittarius">Sagittarius</SelectItem>
-                                <SelectItem value="capricorn">Capricorn</SelectItem>
-                                <SelectItem value="aquarius">Aquarius</SelectItem>
+                                <SelectItem value="sagittarius">
+                                  Sagittarius
+                                </SelectItem>
+                                <SelectItem value="capricorn">
+                                  Capricorn
+                                </SelectItem>
+                                <SelectItem value="aquarius">
+                                  Aquarius
+                                </SelectItem>
                                 <SelectItem value="pisces">Pisces</SelectItem>
                               </SelectContent>
                             </Select>
@@ -1622,7 +1730,6 @@ export default function ProfilePage() {
                       </Button>
                     </div>
 
-
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-base">Weekly Summary</Label>
@@ -1748,7 +1855,6 @@ export default function ProfilePage() {
                         </SelectContent>
                       </Select>
                     </div>
-
                   </CardContent>
                 </Card>
 

@@ -2,6 +2,7 @@
 // Handles aura points updates and calculations for AI chat sessions
 
 import { createClient } from "@/lib/supabase/client";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { calculateAuraReward } from "@/lib/aura-utils";
 
 export interface ChatSessionData {
@@ -16,10 +17,12 @@ export interface AuraUpdateResult {
   success: boolean;
   oldAura: number;
   newAura: number;
-  pointsAdded: number;
+  pointsAdded?: number;
+  pointsSubtracted?: number;
   oldLevel: number;
   newLevel: number;
-  levelUp: boolean;
+  levelUp?: boolean;
+  levelDown?: boolean;
   reason: string;
   error?: string;
 }
@@ -65,6 +68,102 @@ export async function addAuraPoints(
       oldLevel: 1,
       newLevel: 1,
       levelUp: false,
+      reason,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Subtract aura points from a user's profile
+ * Uses the existing add_aura_points function with negative values
+ */
+export async function subtractAuraPoints(
+  userId: string,
+  pointsToSubtract: number,
+  reason: string = "Feature Usage"
+): Promise<AuraUpdateResult> {
+  // Use service role client for server-side RPC calls
+  const supabase = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  try {
+    console.log("🔄 subtractAuraPoints called:", {
+      userId,
+      pointsToSubtract,
+      reason,
+    });
+
+    // First check if user has enough points
+    const { data: currentStats, error: statsError } = await supabase
+      .from("profiles")
+      .select("aura_points")
+      .eq("id", userId)
+      .single();
+
+    if (statsError) {
+      console.error("❌ Error fetching current stats:", statsError);
+      throw statsError;
+    }
+
+    const currentAura = currentStats?.aura_points || 0;
+    console.log("📊 Current aura points:", currentAura);
+
+    if (currentAura < pointsToSubtract) {
+      console.log("❌ Insufficient aura points:", {
+        currentAura,
+        required: pointsToSubtract,
+      });
+      return {
+        success: false,
+        oldAura: currentAura,
+        newAura: currentAura,
+        pointsSubtracted: 0,
+        oldLevel: 1,
+        newLevel: 1,
+        levelDown: false,
+        reason,
+        error: "Insufficient aura points",
+      };
+    }
+
+    // Use add_aura_points with negative value to subtract
+    console.log("🔄 Calling add_aura_points RPC with negative value...");
+    const { data, error } = await supabase.rpc("add_aura_points", {
+      user_id: userId,
+      points_to_add: -pointsToSubtract, // Negative value to subtract
+      reason: reason,
+    });
+
+    if (error) {
+      console.error("❌ RPC Error:", error);
+      throw error;
+    }
+
+    console.log("✅ RPC Success:", data);
+
+    return {
+      success: true,
+      oldAura: data.old_aura,
+      newAura: data.new_aura,
+      pointsSubtracted: pointsToSubtract,
+      oldLevel: data.old_level,
+      newLevel: data.new_level,
+      levelDown: data.new_level < data.old_level,
+      reason: data.reason,
+    };
+  } catch (error) {
+    console.error("Error subtracting aura points:", error);
+    return {
+      success: false,
+      oldAura: 0,
+      newAura: 0,
+      pointsSubtracted: 0,
+      oldLevel: 1,
+      newLevel: 1,
+      levelDown: false,
       reason,
       error: error instanceof Error ? error.message : "Unknown error",
     };
