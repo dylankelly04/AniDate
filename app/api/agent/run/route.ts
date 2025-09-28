@@ -165,15 +165,95 @@ async function processExistingMatches(userId: string, supabase: any) {
       );
 
       if (!waitingAction) {
-        // Always send a message - no conditions, just send one message per run
-        console.log(`📤 [AGENT RUN] Sending message to ${otherUser.full_name}`);
-        await readAndRespondToChat(
-          userId,
-          otherUser,
-          match.id,
-          preferences,
-          supabase
-        );
+        // Get the user's last AI message timestamp
+        const { data: userProfile, error: profileError } = await supabase
+          .from("profiles")
+          .select("last_ai_message_timestamp")
+          .eq("id", userId)
+          .single();
+
+        if (profileError) {
+          console.error(
+            `❌ [AGENT RUN] Error fetching user profile:`,
+            profileError
+          );
+          continue;
+        }
+
+        const lastAiTimestamp = userProfile?.last_ai_message_timestamp;
+
+        // Check if there are messages from the other person AFTER the last AI message
+        let newMessagesQuery = supabase
+          .from("user_messages")
+          .select("*")
+          .eq("match_id", match.id)
+          .eq("sender_id", otherUser.id)
+          .eq("receiver_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        // Only look for messages after the last AI message timestamp
+        if (lastAiTimestamp) {
+          newMessagesQuery = newMessagesQuery.gt("created_at", lastAiTimestamp);
+        }
+
+        const { data: newMessages, error: newMessagesError } =
+          await newMessagesQuery;
+
+        if (newMessagesError) {
+          console.error(
+            `❌ [AGENT RUN] Error checking new messages for ${otherUser.full_name}:`,
+            newMessagesError
+          );
+          continue;
+        }
+
+        // Check if chat is completely empty
+        const { data: allMessages, error: allMessagesError } = await supabase
+          .from("user_messages")
+          .select("*")
+          .eq("match_id", match.id)
+          .limit(1);
+
+        if (allMessagesError) {
+          console.error(
+            `❌ [AGENT RUN] Error checking all messages for ${otherUser.full_name}:`,
+            allMessagesError
+          );
+          continue;
+        }
+
+        const hasNewMessages = newMessages && newMessages.length > 0;
+        const isChatEmpty = !allMessages || allMessages.length === 0;
+
+        console.log(`🔍 [AGENT RUN] Pre-check for ${otherUser.full_name}:`, {
+          hasNewMessages,
+          isChatEmpty,
+          newMessageCount: newMessages?.length || 0,
+          totalMessages: allMessages?.length || 0,
+          lastAiTimestamp: lastAiTimestamp || "never",
+          newestMessageTime: newMessages?.[0]?.created_at || "none",
+        });
+
+        if (hasNewMessages || isChatEmpty) {
+          console.log(
+            `📤 [AGENT RUN] Processing ${otherUser.full_name} - ${
+              hasNewMessages ? "has new messages" : "chat is empty"
+            }`
+          );
+
+          await readAndRespondToChat(
+            userId,
+            otherUser,
+            match.id,
+            preferences,
+            supabase
+          );
+        } else {
+          console.log(
+            `⏭️ [AGENT RUN] Skipping ${otherUser.full_name} - no new messages and chat not empty`
+          );
+        }
       } else {
         console.log(
           `⏳ [AGENT RUN] Skipping ${otherUser.full_name} - waiting for user input`
@@ -344,43 +424,57 @@ async function readAndRespondToChat(
       `🔍 [READ_CHAT] Starting readAndRespondToChat for match ${matchId} with ${otherUser.full_name}`
     );
 
-    // Get the most recent message from the other person
-    const { data: recentMessages, error: messagesError } = await supabase
+    // Check if there are any unread messages from the other person
+    const { data: unreadMessages, error: unreadError } = await supabase
       .from("user_messages")
       .select("*")
       .eq("match_id", matchId)
       .eq("sender_id", otherUser.id)
       .eq("receiver_id", userId)
+      .eq("is_read", false)
       .order("created_at", { ascending: false })
       .limit(1);
 
-    if (messagesError) {
+    if (unreadError) {
       console.error(
-        "❌ [READ_CHAT] Error fetching recent messages:",
-        messagesError
+        "❌ [READ_CHAT] Error fetching unread messages:",
+        unreadError
       );
       return;
     }
 
-    console.log(`📨 [READ_CHAT] Recent messages query result:`, {
-      messageCount: recentMessages?.length || 0,
-      latestMessage:
-        recentMessages?.[0]?.content?.substring(0, 100) + "..." || "none",
+    // Check if chat is completely empty
+    const { data: allMessages, error: allMessagesError } = await supabase
+      .from("user_messages")
+      .select("*")
+      .eq("match_id", matchId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (allMessagesError) {
+      console.error(
+        "❌ [READ_CHAT] Error fetching all messages:",
+        allMessagesError
+      );
+      return;
+    }
+
+    console.log(`📨 [READ_CHAT] Message check:`, {
+      unreadMessages: unreadMessages?.length || 0,
+      allMessages: allMessages?.length || 0,
+      unreadContent:
+        unreadMessages?.[0]?.content?.substring(0, 50) + "..." || "none",
     });
 
+    let shouldSendMessage = false;
     let responseMessage: string;
 
-    if (!recentMessages || recentMessages.length === 0) {
-      // Chat is empty, send greeting
-      responseMessage = "hi, nice to meet you!";
+    if (unreadMessages && unreadMessages.length > 0) {
+      // There's an unread message from the other person - respond to it
+      shouldSendMessage = true;
+      const theirMessage = unreadMessages[0].content;
       console.log(
-        `💬 [READ_CHAT] Chat is empty with ${otherUser.full_name}, sending greeting`
-      );
-    } else {
-      // Generate appropriate response based on their message
-      const theirMessage = recentMessages[0].content;
-      console.log(
-        `💬 [READ_CHAT] Last message from ${otherUser.full_name}: "${theirMessage}"`
+        `💬 [READ_CHAT] Unread message from ${otherUser.full_name}: "${theirMessage}"`
       );
 
       console.log(`🤖 [READ_CHAT] Calling OpenAI to generate response...`);
@@ -392,9 +486,22 @@ async function readAndRespondToChat(
       console.log(
         `🤖 [READ_CHAT] OpenAI response generated: "${responseMessage}"`
       );
+    } else if (!allMessages || allMessages.length === 0) {
+      // Chat is completely empty - send greeting
+      shouldSendMessage = true;
+      responseMessage = "hi, nice to meet you!";
+      console.log(
+        `💬 [READ_CHAT] Chat is empty with ${otherUser.full_name}, sending greeting`
+      );
+    } else {
+      // No unread messages and chat is not empty - don't send anything
+      console.log(
+        `⏭️ [READ_CHAT] No unread messages from ${otherUser.full_name}, skipping response`
+      );
+      return;
     }
 
-    if (responseMessage) {
+    if (shouldSendMessage && responseMessage) {
       console.log(`📤 [READ_CHAT] Attempting to send message to database...`);
 
       // Send the response message
@@ -420,6 +527,24 @@ async function readAndRespondToChat(
       console.log(
         `✅ [READ_CHAT] Message inserted into user_messages table successfully`
       );
+
+      // Update the last AI message timestamp to prevent duplicate processing
+      const currentTimestamp = new Date().toISOString();
+      const { error: timestampError } = await supabase
+        .from("profiles")
+        .update({ last_ai_message_timestamp: currentTimestamp })
+        .eq("id", userId);
+
+      if (timestampError) {
+        console.error(
+          "❌ [READ_CHAT] Error updating AI message timestamp:",
+          timestampError
+        );
+      } else {
+        console.log(
+          `✅ [READ_CHAT] Updated last AI message timestamp: ${currentTimestamp}`
+        );
+      }
 
       // Record the action
       const { error: actionError } = await supabase
@@ -448,7 +573,7 @@ async function readAndRespondToChat(
       );
     } else {
       console.log(
-        `❌ [READ_CHAT] No response message generated, skipping send`
+        `❌ [READ_CHAT] No response message generated or not needed, skipping send`
       );
     }
   } catch (error) {

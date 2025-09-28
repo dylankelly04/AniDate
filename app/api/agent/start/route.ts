@@ -66,7 +66,9 @@ async function startAgentProcess(
     // Set agent as active in the database
     const { error: updateError } = await supabase
       .from("profiles")
-      .update({ agent_active: true })
+      .update({
+        agent_active: true,
+      })
       .eq("id", userId);
 
     if (updateError) {
